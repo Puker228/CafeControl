@@ -1,14 +1,19 @@
-up:
-	if docker network ls --format "{{.Name}}" | grep backend_network; then \
-		echo "Network 'backend_network' already exists"; \
+up-db:
+	if docker network ls --format "{{.Name}}" | grep bar_network; then \
+		echo "Network 'bar_network' already exists"; \
 	else \
-		echo "Creating network 'backend_network'..."; \
-		docker network create backend_network; \
+		echo "Creating network 'bar_network'..."; \
+		docker network create bar_network; \
 	fi
 
 	docker compose build
 	docker compose down
 	docker compose up -d
+
+run:
+	cd src && uv run main.py
+
+up: up-db run
 
 stop:
 	docker compose stop

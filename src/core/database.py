@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
 
-from fastapi import Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -22,10 +21,6 @@ class Base(DeclarativeBase):
     created_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now, nullable=False)
     deleted_at: Mapped[datetime] = mapped_column(nullable=True)
-
-
-def get_session(request: Request) -> AsyncSession:
-    return request.state.db
 
 
 async def clear_database():
