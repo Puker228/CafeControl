@@ -52,21 +52,34 @@ def run_migrations_offline():
     """
     url = get_url()
     context.configure(
-        url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        compare_type=True,
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
 
-async def run_migrations_online():
-    """Run migrations in 'online' mode.
+def do_run_migrations(connection):
+    context.configure(connection=connection, target_metadata=target_metadata)
 
-    In this scenario we need to create an Engine
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations():
+    """In this scenario we need to create an Engine
     and associate a connection with the context.
 
     """
-    connectable = create_async_engine(get_url(), poolclass=pool.NullPool, future=True)
+
+    connectable = create_async_engine(
+        get_url(),
+        poolclass=pool.NullPool,
+        future=True,
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
@@ -74,17 +87,13 @@ async def run_migrations_online():
     await connectable.dispose()
 
 
-def do_run_migrations(connection):
-    """Helper function to run migrations."""
-    context.configure(
-        connection=connection, target_metadata=target_metadata, compare_type=True
-    )
+def run_migrations_online():
+    """Run migrations in 'online' mode."""
 
-    with context.begin_transaction():
-        context.run_migrations()
+    asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    run_migrations_online()
