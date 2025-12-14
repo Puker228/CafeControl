@@ -1,0 +1,25 @@
+# Python
+__pycache__
+app.egg-info
+*.pyc
+.mypy_cache
+.coverage
+htmlcov
+.venv
+.idea
+.git
+.env
+/tests
+LICENSE
+Makefile
+README.md
+setup.cfg
+.gitlab-ci.yml
+.github
+.gitignore
+.ruff_cache
+.env-example
+.dockerignore
+.DS_Store
+src/project_logs/logs
+docker-compose.yaml
