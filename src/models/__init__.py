@@ -1,7 +1,4 @@
 from core.database import Base
-from user.models import User
+from user.models import Employee, Position
 
-__all__ = [
-    "Base",
-    "User",
-]
+__all__ = ["Base", "Employee", "Position"]
