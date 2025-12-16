@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -28,3 +29,13 @@ class Employee(Base):
         nullable=True,
     )
     position: Mapped[Optional["Position"]] = relationship(back_populates="properties")
+
+
+class Shift(Base):
+    __tablename__ = "shifts"
+
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"))
+    employee: Mapped["Employee"] = relationship()
+
+    start_time: Mapped[datetime] = mapped_column(nullable=False)
+    end_time: Mapped[datetime] = mapped_column(nullable=False)
