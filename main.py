@@ -2,9 +2,12 @@ import tkinter as tk
 import uuid
 from datetime import datetime, timedelta
 from tkinter import messagebox, ttk
+from tkinter.filedialog import asksaveasfilename
 from typing import Optional
 from uuid import UUID
 
+from openpyxl import Workbook
+from openpyxl.styles import Font
 from sqlalchemy import ForeignKey, create_engine
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -373,6 +376,78 @@ def create_category():
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
+def export_report():
+    s = Session()
+
+    wb = Workbook()
+
+    # ----------------- Sheet 1: Employees & Salary -----------------
+    ws1 = wb.active
+    ws1.title = "Зарплаты"
+
+    ws1.append(["Сотрудник", "Должность", "Часы", "Заработал"])
+
+    shifts = s.query(Shift).join(Employee).join(Position).all()
+
+    summary = {}
+
+    for sh in shifts:
+        name = f"{sh.employee.first_name} {sh.employee.last_name}"
+        if name not in summary:
+            summary[name] = {
+                "position": sh.employee.position.name,
+                "hours": 0,
+                "money": 0,
+            }
+        summary[name]["hours"] += sh.worked_hours()
+        summary[name]["money"] += sh.earned_money()
+
+    for name, data in summary.items():
+        ws1.append(
+            [name, data["position"], round(data["hours"], 2), round(data["money"], 2)]
+        )
+
+    # bold header
+    for cell in ws1[1]:
+        cell.font = Font(bold=True)
+
+    # ----------------- Sheet 2: Menu -----------------
+    ws2 = wb.create_sheet("Меню")
+
+    ws2.append(["Название", "Категория", "Цена"])
+
+    menu = s.query(MenuItem).join(ItemCategory).all()
+    for m in menu:
+        ws2.append([m.name, m.category.name if m.category else "", m.price])
+
+    for cell in ws2[1]:
+        cell.font = Font(bold=True)
+
+    # ----------------- Sheet 3: Клиенты -----------------
+    ws3 = wb.create_sheet("Клиенты")
+    ws3.append(["Имя", "Email"])
+
+    customers = s.query(Customer).all()
+    for c in customers:
+        ws3.append([c.name, c.email])
+
+    for cell in ws3[1]:
+        cell.font = Font(bold=True)
+
+    s.close()
+
+    # ---------------- Save file ----------------
+    file = asksaveasfilename(
+        defaultextension=".xlsx",
+        filetypes=[("Excel files", "*.xlsx")],
+        title="Сохранить отчет",
+    )
+
+    if file:
+        wb.save(file)
+        messagebox.showinfo("Готово", "Отчёт успешно сохранён!")
+
+
 # ===================== GUI =====================
 
 root = tk.Tk()
@@ -381,6 +456,14 @@ root.geometry("1000x600")
 
 nb = ttk.Notebook(root)
 nb.pack(fill="both", expand=True)
+tk.Button(
+    root,
+    text="📊 Выгрузить отчет в Excel",
+    font=("Arial", 12, "bold"),
+    bg="#4CAF50",
+    fg="white",
+    command=export_report,
+).pack(fill="x", padx=10, pady=5)
 
 # Customers
 fc = ttk.Frame(nb)
