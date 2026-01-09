@@ -29,8 +29,13 @@ class Base(DeclarativeBase):
 
 class Customer(Base):
     __tablename__ = "customers"
+
     name: Mapped[str]
     email: Mapped[str] = mapped_column(unique=True)
+
+    orders: Mapped[list["Order"]] = relationship(
+        back_populates="customer", cascade="all, delete"
+    )
 
 
 class Position(Base):
@@ -84,7 +89,39 @@ class MenuItem(Base):
     category: Mapped["ItemCategory"] = relationship()
 
 
+class Order(Base):
+    __tablename__ = "orders"
+
+    customer_id: Mapped[UUID] = mapped_column(ForeignKey("customers.id"))
+    customer: Mapped["Customer"] = relationship(back_populates="orders")
+
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order", cascade="all, delete"
+    )
+
+    def total(self):
+        return round(sum(i.total_price() for i in self.items), 2)
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    order_id: Mapped[UUID] = mapped_column(ForeignKey("orders.id"))
+    order: Mapped["Order"] = relationship(back_populates="items")
+
+    menu_item_id: Mapped[UUID] = mapped_column(ForeignKey("menu_items.id"))
+    menu_item: Mapped["MenuItem"] = relationship()
+
+    quantity: Mapped[int] = mapped_column(default=1)
+
+    def total_price(self):
+        return round(self.menu_item.price * self.quantity, 2)
+
+
 engine = create_engine("sqlite:///app.db", echo=False)
+
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
