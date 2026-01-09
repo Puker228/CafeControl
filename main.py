@@ -203,6 +203,27 @@ def load_positions():
     reload_tree(positions_tree, rows)
 
 
+def load_orders():
+    s = Session()
+
+    orders = s.query(Order).join(Customer).all()
+    rows = []
+
+    for o in orders:
+        rows.append(
+            (
+                o.id,
+                o.customer.name if o.customer else "",
+                o.created_at.strftime("%Y-%m-%d %H:%M"),
+                len(o.items),
+                o.total(),
+            )
+        )
+
+    s.close()
+    reload_tree(orders_tree, rows)
+
+
 def load_employees():
     s = Session()
     rows = (
@@ -233,6 +254,102 @@ def load_menu():
 
 
 # ===================== CREATE FORMS =====================
+
+
+def report_all_orders():
+    s = Session()
+
+    rows = (
+        s.query(
+            Order.id,
+            Customer.name,
+            MenuItem.name,
+            OrderItem.quantity,
+            MenuItem.price,
+            (OrderItem.quantity * MenuItem.price).label("total"),
+        )
+        .join(Customer, Order.customer_id == Customer.id)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .join(MenuItem, OrderItem.menu_item_id == MenuItem.id)
+        .all()
+    )
+
+    s.close()
+    return rows
+
+
+def create_order():
+    win = tk.Toplevel(root)
+    win.title("Новый заказ")
+    win.geometry("500x500")
+
+    tk.Label(win, text="Клиент").pack()
+
+    customer_var = tk.StringVar()
+    customer_box = ttk.Combobox(win, textvariable=customer_var, state="readonly")
+    customer_box.pack(fill="x")
+
+    tk.Label(win, text="Позиции").pack()
+
+    menu_list = tk.Listbox(win, height=10)
+    menu_list.pack(fill="both", expand=True)
+
+    tk.Label(win, text="Количество").pack()
+    qty = tk.Entry(win)
+    qty.insert(0, "1")
+    qty.pack()
+
+    cart = []
+
+    cart_box = tk.Listbox(win, height=6)
+    cart_box.pack(fill="both", expand=True)
+
+    s = Session()
+
+    customers = s.query(Customer).all()
+    customer_map = {c.name: c.id for c in customers}
+    customer_box["values"] = list(customer_map.keys())
+
+    items = s.query(MenuItem).all()
+    item_map = {f"{i.name} ({i.price})": i.id for i in items}
+    menu_list.insert("end", *item_map.keys())
+
+    s.close()
+
+    def add_to_cart():
+        sel = menu_list.curselection()
+        if not sel:
+            return
+
+        key = menu_list.get(sel)
+        item_id = item_map[key]
+        quantity = int(qty.get())
+
+        cart.append((item_id, quantity))
+        cart_box.insert("end", f"{key} x{quantity}")
+
+    def save():
+        if not customer_var.get():
+            messagebox.showerror("Ошибка", "Выберите клиента")
+            return
+
+        s = Session()
+
+        order = Order(customer_id=customer_map[customer_var.get()])
+        s.add(order)
+        s.flush()
+
+        for item_id, quantity in cart:
+            s.add(OrderItem(order_id=order.id, menu_item_id=item_id, quantity=quantity))
+
+        s.commit()
+        s.close()
+
+        load_orders()
+        win.destroy()
+
+    tk.Button(win, text="➕ Добавить в чек", command=add_to_cart).pack()
+    tk.Button(win, text="💾 Сохранить заказ", command=save).pack()
 
 
 def create_position():
@@ -587,5 +704,24 @@ tk.Button(
 ).pack()
 
 load_shifts()
+
+# Orders
+fo = ttk.Frame(nb)
+nb.add(fo, text="Orders")
+
+orders_tree = create_table(
+    fo,
+    ("id", "customer", "date", "items", "total"),
+    ("ID", "Клиент", "Дата", "Позиций", "Сумма"),
+)
+
+tk.Button(fo, text="➕ Новый заказ", command=create_order).pack()
+tk.Button(
+    fo,
+    text="🗑 Удалить",
+    command=lambda: delete_selected(orders_tree, Order, load_orders),
+).pack()
+
+load_orders()
 
 root.mainloop()
