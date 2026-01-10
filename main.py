@@ -693,17 +693,15 @@ def export_report():
 # ===================== GUI =====================
 
 root = tk.Tk()
-root.title("Business App")
-root.geometry("1000x600")
+root.title("Cafe Control")
+root.geometry("1280x720")
 
 nb = ttk.Notebook(root)
 nb.pack(fill="both", expand=True)
 tk.Button(
     root,
-    text="📊 Выгрузить отчет в Excel",
+    text="Выгрузить отчеты в Excel",
     font=("Arial", 12, "bold"),
-    bg="#4CAF50",
-    fg="white",
     command=export_report,
 ).pack(fill="x", padx=10, pady=5)
 
@@ -711,10 +709,10 @@ tk.Button(
 fc = ttk.Frame(nb)
 nb.add(fc, text="Customers")
 customers_tree = create_table(fc, ("id", "name", "email"), ("ID", "Имя", "Email"))
-tk.Button(fc, text="➕ Добавить", command=create_customer).pack()
+tk.Button(fc, text="Добавить", command=create_customer).pack()
 tk.Button(
     fc,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(customers_tree, Customer, load_customers),
 ).pack()
 load_customers()
@@ -723,10 +721,10 @@ load_customers()
 fp = ttk.Frame(nb)
 nb.add(fp, text="Positions")
 positions_tree = create_table(fp, ("id", "name", "salary"), ("ID", "Название", "ЗП"))
-tk.Button(fp, text="➕ Добавить", command=create_position).pack()
+tk.Button(fp, text="Добавить", command=create_position).pack()
 tk.Button(
     fp,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(positions_tree, Position, load_positions),
 ).pack()
 load_positions()
@@ -739,10 +737,10 @@ employees_tree = create_table(
     ("id", "first", "last", "position"),
     ("ID", "Имя", "Фамилия", "Должность"),
 )
-tk.Button(fe, text="➕ Добавить", command=create_employee).pack()
+tk.Button(fe, text="Добавить", command=create_employee).pack()
 tk.Button(
     fe,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(employees_tree, Employee, load_employees),
 ).pack()
 load_employees()
@@ -751,10 +749,10 @@ load_employees()
 fcat = ttk.Frame(nb)
 nb.add(fcat, text="Categories")
 categories_tree = create_table(fcat, ("id", "name"), ("ID", "Название"))
-tk.Button(fcat, text="➕ Добавить", command=create_category).pack()
+tk.Button(fcat, text="Добавить", command=create_category).pack()
 tk.Button(
     fcat,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(categories_tree, ItemCategory, load_categories),
 ).pack()
 load_categories()
@@ -767,10 +765,10 @@ menu_tree = create_table(
     ("id", "name", "price", "category"),
     ("ID", "Название", "Цена", "Категория"),
 )
-tk.Button(fm, text="➕ Добавить", command=create_menu_item).pack()
+tk.Button(fm, text="Добавить", command=create_menu_item).pack()
 tk.Button(
     fm,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(menu_tree, MenuItem, load_menu),
 ).pack()
 load_menu()
@@ -784,10 +782,10 @@ shifts_tree = create_table(
     ("id", "employee", "start", "end", "hours", "money"),
     ("ID", "Сотрудник", "Начало", "Конец", "Часы", "Заработал"),
 )
-tk.Button(fs, text="➕ Добавить", command=create_shift).pack()
+tk.Button(fs, text="Добавить", command=create_shift).pack()
 tk.Button(
     fs,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(shifts_tree, Shift, load_shifts),
 ).pack()
 
@@ -803,10 +801,10 @@ orders_tree = create_table(
     ("ID", "Клиент", "Дата", "Позиций", "Сумма"),
 )
 
-tk.Button(fo, text="➕ Новый заказ", command=create_order).pack()
+tk.Button(fo, text="Новый заказ", command=create_order).pack()
 tk.Button(
     fo,
-    text="🗑 Удалить",
+    text="Удалить",
     command=lambda: delete_selected(orders_tree, Order, load_orders),
 ).pack()
 
