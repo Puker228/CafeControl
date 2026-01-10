@@ -532,65 +532,153 @@ def create_category():
 
 def export_report():
     s = Session()
-
     wb = Workbook()
 
-    # ----------------- Sheet 1: Employees & Salary -----------------
-    ws1 = wb.active
-    ws1.title = "Зарплаты"
+    # =====================================================
+    # 1. ПРОДАЖИ ПО ДНЯМ
+    # =====================================================
+    ws_sales = wb.active
+    ws_sales.title = "Продажи по дням"
+    ws_sales.append(["Дата", "Заказов", "Позиций", "Выручка"])
 
-    ws1.append(["Сотрудник", "Должность", "Часы", "Заработал"])
+    orders = s.query(Order).all()
+    sales = {}
 
-    shifts = s.query(Shift).join(Employee).join(Position).all()
+    for o in orders:
+        day = o.created_at.date()
+        if day not in sales:
+            sales[day] = {"orders": 0, "items": 0, "money": 0}
 
-    summary = {}
+        sales[day]["orders"] += 1
+        for i in o.items:
+            sales[day]["items"] += i.quantity
+            sales[day]["money"] += i.total_price()
+
+    for d, v in sorted(sales.items()):
+        ws_sales.append([d, v["orders"], v["items"], round(v["money"], 2)])
+
+    for c in ws_sales[1]:
+        c.font = Font(bold=True)
+
+    # =====================================================
+    # 2. ТОП БЛЮД
+    # =====================================================
+    ws_top = wb.create_sheet("Топ блюд")
+    ws_top.append(["Блюдо", "Категория", "Продано", "Выручка"])
+
+    items = {}
+    order_items = s.query(OrderItem).join(MenuItem).outerjoin(ItemCategory).all()
+
+    for oi in order_items:
+        key = oi.menu_item.name
+        if key not in items:
+            items[key] = {
+                "cat": oi.menu_item.category.name if oi.menu_item.category else "",
+                "qty": 0,
+                "money": 0,
+            }
+
+        items[key]["qty"] += oi.quantity
+        items[key]["money"] += oi.total_price()
+
+    for name, v in sorted(items.items(), key=lambda x: x[1]["money"], reverse=True):
+        ws_top.append([name, v["cat"], v["qty"], round(v["money"], 2)])
+
+    for c in ws_top[1]:
+        c.font = Font(bold=True)
+
+    # =====================================================
+    # 3. КЛИЕНТЫ (LTV)
+    # =====================================================
+    ws_clients = wb.create_sheet("Клиенты LTV")
+    ws_clients.append(["Клиент", "Email", "Заказов", "Сумма", "Средний чек"])
+
+    customers = s.query(Customer).all()
+
+    for cst in customers:
+        total = sum(o.total() for o in cst.orders)
+        count = len(cst.orders)
+        avg = round(total / count, 2) if count else 0
+
+        ws_clients.append([cst.name, cst.email, count, round(total, 2), avg])
+
+    for c in ws_clients[1]:
+        c.font = Font(bold=True)
+
+    # =====================================================
+    # 4. ЭФФЕКТИВНОСТЬ СОТРУДНИКОВ
+    # =====================================================
+    ws_emp = wb.create_sheet("Эффективность")
+    ws_emp.append(["Сотрудник", "Часы", "Заработал", "₽/час"])
+
+    shifts = s.query(Shift).join(Employee).all()
+    emp = {}
 
     for sh in shifts:
         name = f"{sh.employee.first_name} {sh.employee.last_name}"
-        if name not in summary:
-            summary[name] = {
-                "position": sh.employee.position.name,
-                "hours": 0,
-                "money": 0,
-            }
-        summary[name]["hours"] += sh.worked_hours()
-        summary[name]["money"] += sh.earned_money()
+        if name not in emp:
+            emp[name] = {"hours": 0, "money": 0}
 
-    for name, data in summary.items():
-        ws1.append(
-            [name, data["position"], round(data["hours"], 2), round(data["money"], 2)]
-        )
+        emp[name]["hours"] += sh.worked_hours()
+        emp[name]["money"] += sh.earned_money()
 
-    # bold header
-    for cell in ws1[1]:
-        cell.font = Font(bold=True)
+    for name, v in emp.items():
+        rate = round(v["money"] / v["hours"], 2) if v["hours"] else 0
+        ws_emp.append([name, round(v["hours"], 2), round(v["money"], 2), rate])
 
-    # ----------------- Sheet 2: Menu -----------------
-    ws2 = wb.create_sheet("Меню")
+    for c in ws_emp[1]:
+        c.font = Font(bold=True)
 
-    ws2.append(["Название", "Категория", "Цена"])
+    # =====================================================
+    # 5. ПРИБЫЛЬ
+    # =====================================================
+    ws_profit = wb.create_sheet("Прибыль")
+    ws_profit.append(["Выручка", "Зарплаты", "Прибыль", "Маржа %"])
 
-    menu = s.query(MenuItem).join(ItemCategory).all()
-    for m in menu:
-        ws2.append([m.name, m.category.name if m.category else "", m.price])
+    revenue = sum(o.total() for o in orders)
+    salaries = sum(v["money"] for v in emp.values())
+    profit = revenue - salaries
+    margin = round((profit / revenue) * 100, 2) if revenue else 0
 
-    for cell in ws2[1]:
-        cell.font = Font(bold=True)
+    ws_profit.append(
+        [
+            round(revenue, 2),
+            round(salaries, 2),
+            round(profit, 2),
+            margin,
+        ]
+    )
 
-    # ----------------- Sheet 3: Клиенты -----------------
-    ws3 = wb.create_sheet("Клиенты")
-    ws3.append(["Имя", "Email"])
+    for c in ws_profit[1]:
+        c.font = Font(bold=True)
 
-    customers = s.query(Customer).all()
-    for c in customers:
-        ws3.append([c.name, c.email])
+    # =====================================================
+    # 6. НАГРУЗКА ПО ЧАСАМ
+    # =====================================================
+    ws_hours = wb.create_sheet("Нагрузка по часам")
+    ws_hours.append(["Час", "Заказов", "Выручка"])
 
-    for cell in ws3[1]:
-        cell.font = Font(bold=True)
+    hours = {}
+
+    for o in orders:
+        h = o.created_at.hour
+        if h not in hours:
+            hours[h] = {"count": 0, "money": 0}
+
+        hours[h]["count"] += 1
+        hours[h]["money"] += o.total()
+
+    for h in sorted(hours):
+        ws_hours.append([f"{h}:00", hours[h]["count"], round(hours[h]["money"], 2)])
+
+    for c in ws_hours[1]:
+        c.font = Font(bold=True)
 
     s.close()
 
-    # ---------------- Save file ----------------
+    # =====================================================
+    # SAVE
+    # =====================================================
     file = asksaveasfilename(
         defaultextension=".xlsx",
         filetypes=[("Excel files", "*.xlsx")],
