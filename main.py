@@ -8,7 +8,7 @@ from uuid import UUID
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from sqlalchemy import ForeignKey, create_engine
+from sqlalchemy import ForeignKey, create_engine, Numeric
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -41,7 +41,7 @@ class Customer(Base):
 class Position(Base):
     __tablename__ = "positions"
     name: Mapped[str] = mapped_column(unique=True)
-    salary: Mapped[float]
+    salary: Mapped[float] = mapped_column(Numeric(10, 2))
 
 
 class Shift(Base):
@@ -62,7 +62,8 @@ class Shift(Base):
     def earned_money(self) -> float:
         if not self.end_time or not self.employee or not self.employee.position:
             return 0.0
-        return round(self.worked_hours() * self.employee.position.salary, 2)
+        # float() is needed because position.salary is now Numeric (Decimal)
+        return round(float(self.worked_hours()) * float(self.employee.position.salary), 2)
 
 
 class Employee(Base):
@@ -74,6 +75,8 @@ class Employee(Base):
     position_id: Mapped[UUID] = mapped_column(ForeignKey("positions.id"))
     position: Mapped["Position"] = relationship()
 
+    orders: Mapped[list["Order"]] = relationship(back_populates="employee")
+
 
 class ItemCategory(Base):
     __tablename__ = "item_categories"
@@ -83,7 +86,7 @@ class ItemCategory(Base):
 class MenuItem(Base):
     __tablename__ = "menu_items"
     name: Mapped[str] = mapped_column(unique=True)
-    price: Mapped[float]
+    price: Mapped[float] = mapped_column(Numeric(10, 2))
 
     category_id: Mapped[UUID] = mapped_column(ForeignKey("item_categories.id"))
     category: Mapped["ItemCategory"] = relationship()
@@ -92,8 +95,11 @@ class MenuItem(Base):
 class Order(Base):
     __tablename__ = "orders"
 
-    customer_id: Mapped[UUID] = mapped_column(ForeignKey("customers.id"))
-    customer: Mapped["Customer"] = relationship(back_populates="orders")
+    customer_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    customer: Mapped[Optional["Customer"]] = relationship(back_populates="orders")
+
+    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"))
+    employee: Mapped["Employee"] = relationship(back_populates="orders")
 
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
 
@@ -117,7 +123,7 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(default=1)
 
     def total_price(self):
-        return round(self.menu_item.price * self.quantity, 2)
+        return round(float(self.menu_item.price) * self.quantity, 2)
 
 
 engine = create_engine("sqlite:///app.db", echo=False)
@@ -206,14 +212,15 @@ def load_positions():
 def load_orders():
     s = Session()
 
-    orders = s.query(Order).join(Customer).all()
+    orders = s.query(Order).all()
     rows = []
 
     for o in orders:
         rows.append(
             (
                 o.id,
-                o.customer.name if o.customer else "",
+                o.customer.name if o.customer else "<В зале>",
+                o.employee.first_name + " " + o.employee.last_name if o.employee else "",
                 o.created_at.strftime("%Y-%m-%d %H:%M"),
                 len(o.items),
                 o.total(),
@@ -268,7 +275,7 @@ def report_all_orders():
             MenuItem.price,
             (OrderItem.quantity * MenuItem.price).label("total"),
         )
-        .join(Customer, Order.customer_id == Customer.id)
+        .outerjoin(Customer, Order.customer_id == Customer.id)
         .join(OrderItem, OrderItem.order_id == Order.id)
         .join(MenuItem, OrderItem.menu_item_id == MenuItem.id)
         .all()
@@ -281,10 +288,14 @@ def report_all_orders():
 def create_order():
     win = tk.Toplevel(root)
     win.title("Новый заказ")
-    win.geometry("500x500")
+    win.geometry("500x600")
 
-    tk.Label(win, text="Клиент").pack()
+    tk.Label(win, text="Сотрудник (принял заказ)").pack()
+    employee_var = tk.StringVar()
+    employee_box = ttk.Combobox(win, textvariable=employee_var, state="readonly")
+    employee_box.pack(fill="x")
 
+    tk.Label(win, text="Клиент (необязательно)").pack()
     customer_var = tk.StringVar()
     customer_box = ttk.Combobox(win, textvariable=customer_var, state="readonly")
     customer_box.pack(fill="x")
@@ -306,9 +317,14 @@ def create_order():
 
     s = Session()
 
+    employees = s.query(Employee).all()
+    employee_map = {f"{e.first_name} {e.last_name}": e.id for e in employees}
+    employee_box["values"] = list(employee_map.keys())
+
     customers = s.query(Customer).all()
     customer_map = {c.name: c.id for c in customers}
-    customer_box["values"] = list(customer_map.keys())
+    customer_box["values"] = ["<Нет клиента>"] + list(customer_map.keys())
+    customer_box.set("<Нет клиента>")
 
     items = s.query(MenuItem).all()
     item_map = {f"{i.name} ({i.price})": i.id for i in items}
@@ -323,19 +339,34 @@ def create_order():
 
         key = menu_list.get(sel)
         item_id = item_map[key]
-        quantity = int(qty.get())
+        try:
+            quantity = int(qty.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Количество должно быть числом")
+            return
 
         cart.append((item_id, quantity))
         cart_box.insert("end", f"{key} x{quantity}")
 
     def save():
-        if not customer_var.get():
-            messagebox.showerror("Ошибка", "Выберите клиента")
+        if not employee_var.get():
+            messagebox.showerror("Ошибка", "Выберите сотрудника")
+            return
+
+        if not cart:
+            messagebox.showerror("Ошибка", "Корзина пуста")
             return
 
         s = Session()
 
-        order = Order(customer_id=customer_map[customer_var.get()])
+        c_id = None
+        if customer_var.get() and customer_var.get() != "<Нет клиента>":
+            c_id = customer_map[customer_var.get()]
+
+        order = Order(
+            customer_id=c_id,
+            employee_id=employee_map[employee_var.get()]
+        )
         s.add(order)
         s.flush()
 
@@ -797,8 +828,8 @@ nb.add(fo, text="Orders")
 
 orders_tree = create_table(
     fo,
-    ("id", "customer", "date", "items", "total"),
-    ("ID", "Клиент", "Дата", "Позиций", "Сумма"),
+    ("id", "customer", "employee", "date", "items", "total"),
+    ("ID", "Клиент", "Сотрудник", "Дата", "Позиций", "Сумма"),
 )
 
 tk.Button(fo, text="Новый заказ", command=create_order).pack()
