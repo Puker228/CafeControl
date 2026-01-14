@@ -22,78 +22,87 @@ from sqlalchemy.orm import (
 
 class Base(DeclarativeBase):
     id: Mapped[UUID] = mapped_column(default=uuid.uuid4, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.now)
-    deleted_at: Mapped[datetime] = mapped_column(nullable=True)
 
 
 class Customer(Base):
     __tablename__ = "customers"
 
     name: Mapped[str]
+    phone: Mapped[str]
     email: Mapped[str] = mapped_column(unique=True)
+    loyalty_level: Mapped[str] = mapped_column(default="Bronze")
+    discount_percent: Mapped[float] = mapped_column(default=0.0)
 
     orders: Mapped[list["Order"]] = relationship(
         back_populates="customer", cascade="all, delete"
     )
 
 
-class Position(Base):
-    __tablename__ = "positions"
-    name: Mapped[str] = mapped_column(unique=True)
-    salary: Mapped[float] = mapped_column(Numeric(10, 2))
-
-
-class Shift(Base):
-    __tablename__ = "shifts"
-
-    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"))
-    employee: Mapped["Employee"] = relationship()
-
-    start_time: Mapped[datetime]
-    end_time: Mapped[Optional[datetime]]
-
-    def worked_hours(self) -> float:
-        if not self.end_time:
-            return 0.0
-        delta: timedelta = self.end_time - self.start_time
-        return round(delta.total_seconds() / 3600, 2)
-
-    def earned_money(self) -> float:
-        if not self.end_time or not self.employee or not self.employee.position:
-            return 0.0
-        # float() is needed because position.salary is now Numeric (Decimal)
-        return round(float(self.worked_hours()) * float(self.employee.position.salary), 2)
-
-
 class Employee(Base):
     __tablename__ = "employees"
-    first_name: Mapped[str]
-    last_name: Mapped[str]
-    email: Mapped[str] = mapped_column(nullable=True)
-
-    position_id: Mapped[UUID] = mapped_column(ForeignKey("positions.id"))
-    position: Mapped["Position"] = relationship()
+    fio: Mapped[str]
+    role: Mapped[str]  # бармен, официант, администратор...
+    phone: Mapped[str]
+    hire_date: Mapped[datetime] = mapped_column(default=datetime.now)
+    salary: Mapped[float] = mapped_column(Numeric(10, 2))
 
     orders: Mapped[list["Order"]] = relationship(back_populates="employee")
 
 
-class ItemCategory(Base):
-    __tablename__ = "item_categories"
-    name: Mapped[str] = mapped_column(unique=True)
+class Supplier(Base):
+    __tablename__ = "suppliers"
+    name: Mapped[str]
+    phone: Mapped[str]
+    email: Mapped[str]
+    address: Mapped[str]
+
+    ingredients: Mapped[list["Ingredient"]] = relationship(back_populates="supplier")
+
+
+class Ingredient(Base):
+    __tablename__ = "ingredients"
+    name: Mapped[str]
+    unit: Mapped[str]  # л, кг, шт
+    stock_quantity: Mapped[float]
+    min_stock_level: Mapped[float]
+    purchase_price: Mapped[float] = mapped_column(Numeric(10, 2))
+
+    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("suppliers.id"))
+    supplier: Mapped["Supplier"] = relationship(back_populates="ingredients")
+
+    recipes: Mapped[list["Recipe"]] = relationship(back_populates="ingredient")
 
 
 class MenuItem(Base):
     __tablename__ = "menu_items"
     name: Mapped[str] = mapped_column(unique=True)
-    price: Mapped[float] = mapped_column(Numeric(10, 2))
+    type: Mapped[str]  # еда / напиток / алкоголь ...
+    selling_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    volume_or_weight: Mapped[str]
 
-    category_id: Mapped[UUID] = mapped_column(ForeignKey("item_categories.id"))
-    category: Mapped["ItemCategory"] = relationship()
+    compositions: Mapped[list["OrderComposition"]] = relationship(back_populates="menu_item")
+    recipes: Mapped[list["Recipe"]] = relationship(back_populates="menu_item")
+
+
+class Recipe(Base):
+    __tablename__ = "recipes"
+    menu_item_id: Mapped[UUID] = mapped_column(ForeignKey("menu_items.id"))
+    ingredient_id: Mapped[UUID] = mapped_column(ForeignKey("ingredients.id"))
+    quantity_required: Mapped[float]
+    unit: Mapped[str]
+
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="recipes")
+    ingredient: Mapped["Ingredient"] = relationship(back_populates="recipes")
 
 
 class Order(Base):
     __tablename__ = "orders"
+
+    order_date: Mapped[datetime] = mapped_column(default=datetime.now)
+    order_type: Mapped[str]
+    total_amount: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0)
+    payment_method: Mapped[str]
+    status: Mapped[str]
 
     customer_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("customers.id"), nullable=True)
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="orders")
@@ -101,29 +110,28 @@ class Order(Base):
     employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"))
     employee: Mapped["Employee"] = relationship(back_populates="orders")
 
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
-
-    items: Mapped[list["OrderItem"]] = relationship(
+    compositions: Mapped[list["OrderComposition"]] = relationship(
         back_populates="order", cascade="all, delete"
     )
 
     def total(self):
-        return round(sum(i.total_price() for i in self.items), 2)
+        return round(sum(i.total_price() for i in self.compositions), 2)
 
 
-class OrderItem(Base):
-    __tablename__ = "order_items"
+class OrderComposition(Base):
+    __tablename__ = "order_compositions"
 
     order_id: Mapped[UUID] = mapped_column(ForeignKey("orders.id"))
-    order: Mapped["Order"] = relationship(back_populates="items")
+    order: Mapped["Order"] = relationship(back_populates="compositions")
 
     menu_item_id: Mapped[UUID] = mapped_column(ForeignKey("menu_items.id"))
-    menu_item: Mapped["MenuItem"] = relationship()
+    menu_item: Mapped["MenuItem"] = relationship(back_populates="compositions")
 
     quantity: Mapped[int] = mapped_column(default=1)
+    price_at_sale: Mapped[float] = mapped_column(Numeric(10, 2))
 
     def total_price(self):
-        return round(float(self.menu_item.price) * self.quantity, 2)
+        return round(float(self.price_at_sale) * self.quantity, 2)
 
 
 engine = create_engine("sqlite:///app.db", echo=False)
@@ -176,37 +184,23 @@ def delete_selected(tree, model, reload_func):
 
 def load_customers():
     s = Session()
-    rows = s.query(Customer.id, Customer.name, Customer.email).all()
+    rows = s.query(Customer.id, Customer.name, Customer.phone, Customer.email, Customer.loyalty_level).all()
     s.close()
     reload_tree(customers_tree, rows)
 
 
-def load_shifts():
+def load_suppliers():
     s = Session()
-    shifts = s.query(Shift).join(Employee).join(Position).all()
-
-    rows = []
-    for sh in shifts:
-        rows.append(
-            (
-                sh.id,
-                f"{sh.employee.first_name} {sh.employee.last_name}",
-                sh.start_time.strftime("%Y-%m-%d %H:%M"),
-                sh.end_time.strftime("%Y-%m-%d %H:%M") if sh.end_time else "",
-                sh.worked_hours(),
-                sh.earned_money(),
-            )
-        )
-
+    rows = s.query(Supplier.id, Supplier.name, Supplier.phone, Supplier.email, Supplier.address).all()
     s.close()
-    reload_tree(shifts_tree, rows)
+    reload_tree(suppliers_tree, rows)
 
 
-def load_positions():
+def load_ingredients():
     s = Session()
-    rows = s.query(Position.id, Position.name, Position.salary).all()
+    rows = s.query(Ingredient.id, Ingredient.name, Ingredient.unit, Ingredient.stock_quantity, Ingredient.purchase_price).all()
     s.close()
-    reload_tree(positions_tree, rows)
+    reload_tree(ingredients_tree, rows)
 
 
 def load_orders():
@@ -220,10 +214,11 @@ def load_orders():
             (
                 o.id,
                 o.customer.name if o.customer else "<В зале>",
-                o.employee.first_name + " " + o.employee.last_name if o.employee else "",
-                o.created_at.strftime("%Y-%m-%d %H:%M"),
-                len(o.items),
+                o.employee.fio if o.employee else "",
+                o.order_date.strftime("%Y-%m-%d %H:%M"),
+                len(o.compositions),
                 o.total(),
+                o.status
             )
         )
 
@@ -234,26 +229,17 @@ def load_orders():
 def load_employees():
     s = Session()
     rows = (
-        s.query(Employee.id, Employee.first_name, Employee.last_name, Position.name)
-        .outerjoin(Position)
+        s.query(Employee.id, Employee.fio, Employee.role, Employee.phone, Employee.salary)
         .all()
     )
     s.close()
     reload_tree(employees_tree, rows)
 
 
-def load_categories():
-    s = Session()
-    rows = s.query(ItemCategory.id, ItemCategory.name).all()
-    s.close()
-    reload_tree(categories_tree, rows)
-
-
 def load_menu():
     s = Session()
     rows = (
-        s.query(MenuItem.id, MenuItem.name, MenuItem.price, ItemCategory.name)
-        .outerjoin(ItemCategory)
+        s.query(MenuItem.id, MenuItem.name, MenuItem.type, MenuItem.selling_price, MenuItem.volume_or_weight)
         .all()
     )
     s.close()
@@ -271,13 +257,13 @@ def report_all_orders():
             Order.id,
             Customer.name,
             MenuItem.name,
-            OrderItem.quantity,
-            MenuItem.price,
-            (OrderItem.quantity * MenuItem.price).label("total"),
+            OrderComposition.quantity,
+            OrderComposition.price_at_sale,
+            (OrderComposition.quantity * OrderComposition.price_at_sale).label("total"),
         )
         .outerjoin(Customer, Order.customer_id == Customer.id)
-        .join(OrderItem, OrderItem.order_id == Order.id)
-        .join(MenuItem, OrderItem.menu_item_id == MenuItem.id)
+        .join(OrderComposition, OrderComposition.order_id == Order.id)
+        .join(MenuItem, OrderComposition.menu_item_id == MenuItem.id)
         .all()
     )
 
@@ -300,6 +286,16 @@ def create_order():
     customer_box = ttk.Combobox(win, textvariable=customer_var, state="readonly")
     customer_box.pack(fill="x")
 
+    tk.Label(win, text="Тип заказа (В зале/С собой)").pack()
+    type_entry = tk.Entry(win)
+    type_entry.insert(0, "В зале")
+    type_entry.pack(fill="x")
+
+    tk.Label(win, text="Метод оплаты").pack()
+    payment_entry = tk.Entry(win)
+    payment_entry.insert(0, "Карта")
+    payment_entry.pack(fill="x")
+
     tk.Label(win, text="Позиции").pack()
 
     menu_list = tk.Listbox(win, height=10)
@@ -318,7 +314,7 @@ def create_order():
     s = Session()
 
     employees = s.query(Employee).all()
-    employee_map = {f"{e.first_name} {e.last_name}": e.id for e in employees}
+    employee_map = {e.fio: e.id for e in employees}
     employee_box["values"] = list(employee_map.keys())
 
     customers = s.query(Customer).all()
@@ -327,7 +323,7 @@ def create_order():
     customer_box.set("<Нет клиента>")
 
     items = s.query(MenuItem).all()
-    item_map = {f"{i.name} ({i.price})": i.id for i in items}
+    item_map = {f"{i.name} ({i.selling_price})": (i.id, i.selling_price) for i in items}
     menu_list.insert("end", *item_map.keys())
 
     s.close()
@@ -338,14 +334,14 @@ def create_order():
             return
 
         key = menu_list.get(sel)
-        item_id = item_map[key]
+        item_id, price = item_map[key]
         try:
             quantity = int(qty.get())
         except ValueError:
             messagebox.showerror("Ошибка", "Количество должно быть числом")
             return
 
-        cart.append((item_id, quantity))
+        cart.append((item_id, quantity, price))
         cart_box.insert("end", f"{key} x{quantity}")
 
     def save():
@@ -365,14 +361,20 @@ def create_order():
 
         order = Order(
             customer_id=c_id,
-            employee_id=employee_map[employee_var.get()]
+            employee_id=employee_map[employee_var.get()],
+            order_type=type_entry.get(),
+            payment_method=payment_entry.get(),
+            status="Новый"
         )
         s.add(order)
         s.flush()
 
-        for item_id, quantity in cart:
-            s.add(OrderItem(order_id=order.id, menu_item_id=item_id, quantity=quantity))
+        total = 0
+        for item_id, quantity, price in cart:
+            total += float(price) * quantity
+            s.add(OrderComposition(order_id=order.id, menu_item_id=item_id, quantity=quantity, price_at_sale=price))
 
+        order.total_amount = total
         s.commit()
         s.close()
 
@@ -383,70 +385,88 @@ def create_order():
     tk.Button(win, text="💾 Сохранить заказ", command=save).pack()
 
 
-def create_position():
+def create_supplier():
     win = tk.Toplevel(root)
-    win.title("Новая должность")
+    win.title("Новый поставщик")
 
     tk.Label(win, text="Название").grid(row=0, column=0)
-    tk.Label(win, text="Зарплата").grid(row=1, column=0)
+    tk.Label(win, text="Телефон").grid(row=1, column=0)
+    tk.Label(win, text="Email").grid(row=2, column=0)
+    tk.Label(win, text="Адрес").grid(row=3, column=0)
 
     e_name = tk.Entry(win)
-    e_salary = tk.Entry(win)
+    e_phone = tk.Entry(win)
+    e_email = tk.Entry(win)
+    e_address = tk.Entry(win)
+
     e_name.grid(row=0, column=1)
-    e_salary.grid(row=1, column=1)
+    e_phone.grid(row=1, column=1)
+    e_email.grid(row=2, column=1)
+    e_address.grid(row=3, column=1)
 
     def save():
-        if not e_name.get() or not e_salary.get():
-            messagebox.showerror("Ошибка", "Заполните все поля")
+        if not e_name.get():
+            messagebox.showerror("Ошибка", "Заполните название")
             return
         s = Session()
-        s.add(Position(name=e_name.get(), salary=float(e_salary.get())))
+        s.add(Supplier(name=e_name.get(), phone=e_phone.get(), email=e_email.get(), address=e_address.get()))
         s.commit()
         s.close()
-        load_positions()
+        load_suppliers()
         win.destroy()
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
-def create_shift():
+def create_ingredient():
     win = tk.Toplevel(root)
-    win.title("Новая смена")
+    win.title("Новый ингредиент")
 
-    tk.Label(win, text="Сотрудник").grid(row=0, column=0)
-    tk.Label(win, text="Начало (YYYY-MM-DD HH:MM)").grid(row=1, column=0)
-    tk.Label(win, text="Конец (опц.)").grid(row=2, column=0)
+    tk.Label(win, text="Название").grid(row=0, column=0)
+    tk.Label(win, text="Ед. изм.").grid(row=1, column=0)
+    tk.Label(win, text="Кол-во").grid(row=2, column=0)
+    tk.Label(win, text="Мин. уровень").grid(row=3, column=0)
+    tk.Label(win, text="Цена закупки").grid(row=4, column=0)
+    tk.Label(win, text="Поставщик").grid(row=5, column=0)
 
-    emp_var = tk.StringVar()
-    emp_box = ttk.Combobox(win, textvariable=emp_var, state="readonly")
-    emp_box.grid(row=0, column=1)
+    e_name = tk.Entry(win)
+    e_unit = tk.Entry(win)
+    e_qty = tk.Entry(win)
+    e_min = tk.Entry(win)
+    e_price = tk.Entry(win)
 
-    e_start = tk.Entry(win)
-    e_end = tk.Entry(win)
-    e_start.grid(row=1, column=1)
-    e_end.grid(row=2, column=1)
+    e_name.grid(row=0, column=1)
+    e_unit.grid(row=1, column=1)
+    e_qty.grid(row=2, column=1)
+    e_min.grid(row=3, column=1)
+    e_price.grid(row=4, column=1)
+
+    sup_var = tk.StringVar()
+    sup_box = ttk.Combobox(win, textvariable=sup_var, state="readonly")
+    sup_box.grid(row=5, column=1)
 
     s = Session()
-    employees = s.query(Employee).all()
-    emp_map = {f"{e.first_name} {e.last_name}": e.id for e in employees}
-    emp_box["values"] = list(emp_map.keys())
+    suppliers = s.query(Supplier).all()
+    sup_map = {sup.name: sup.id for sup in suppliers}
+    sup_box["values"] = list(sup_map.keys())
     s.close()
 
     def save():
-        employee_id = emp_map.get(emp_var.get())
-        if not employee_id:
-            messagebox.showerror("Ошибка", "Выберите сотрудника")
+        if not e_name.get() or not sup_var.get():
+            messagebox.showerror("Ошибка", "Заполните поля")
             return
-
-        start = datetime.strptime(e_start.get(), "%Y-%m-%d %H:%M")
-        end = datetime.strptime(e_end.get(), "%Y-%m-%d %H:%M") if e_end.get() else None
-
         s = Session()
-        s.add(Shift(employee_id=employee_id, start_time=start, end_time=end))
+        s.add(Ingredient(
+            name=e_name.get(),
+            unit=e_unit.get(),
+            stock_quantity=float(e_qty.get() or 0),
+            min_stock_level=float(e_min.get() or 0),
+            purchase_price=float(e_price.get() or 0),
+            supplier_id=sup_map[sup_var.get()]
+        ))
         s.commit()
         s.close()
-
-        load_shifts()
+        load_ingredients()
         win.destroy()
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
@@ -456,27 +476,24 @@ def create_employee():
     win = tk.Toplevel(root)
     win.title("Новый сотрудник")
 
-    tk.Label(win, text="Имя").grid(row=0, column=0)
-    tk.Label(win, text="Фамилия").grid(row=1, column=0)
-    tk.Label(win, text="Должность").grid(row=2, column=0)
+    tk.Label(win, text="ФИО").grid(row=0, column=0)
+    tk.Label(win, text="Роль").grid(row=1, column=0)
+    tk.Label(win, text="Телефон").grid(row=2, column=0)
+    tk.Label(win, text="Зарплата").grid(row=3, column=0)
 
-    e_fn = tk.Entry(win)
-    e_ln = tk.Entry(win)
-    e_fn.grid(row=0, column=1)
-    e_ln.grid(row=1, column=1)
+    e_fio = tk.Entry(win)
+    e_role = tk.Entry(win)
+    e_phone = tk.Entry(win)
+    e_salary = tk.Entry(win)
 
-    pos_var = tk.StringVar()
-    pos_box = ttk.Combobox(win, textvariable=pos_var, state="readonly")
-    pos_box.grid(row=2, column=1)
-
-    s = Session()
-    pos_box["values"] = [p.name for p in s.query(Position).all()]
-    s.close()
+    e_fio.grid(row=0, column=1)
+    e_role.grid(row=1, column=1)
+    e_phone.grid(row=2, column=1)
+    e_salary.grid(row=3, column=1)
 
     def save():
         s = Session()
-        pos = s.query(Position).filter_by(name=pos_var.get()).first()
-        s.add(Employee(first_name=e_fn.get(), last_name=e_ln.get(), position=pos))
+        s.add(Employee(fio=e_fio.get(), role=e_role.get(), phone=e_phone.get(), salary=float(e_salary.get() or 0)))
         s.commit()
         s.close()
         load_employees()
@@ -487,30 +504,31 @@ def create_employee():
 
 def create_menu_item():
     win = tk.Toplevel(root)
-    win.title("Новый пункт меню")
+    win.title("Новое блюдо")
 
     tk.Label(win, text="Название").grid(row=0, column=0)
-    tk.Label(win, text="Цена").grid(row=1, column=0)
-    tk.Label(win, text="Категория").grid(row=2, column=0)
+    tk.Label(win, text="Тип").grid(row=1, column=0)
+    tk.Label(win, text="Цена продажи").grid(row=2, column=0)
+    tk.Label(win, text="Объем/Вес").grid(row=3, column=0)
 
     e_name = tk.Entry(win)
+    e_type = tk.Entry(win)
     e_price = tk.Entry(win)
+    e_vol = tk.Entry(win)
+
     e_name.grid(row=0, column=1)
-    e_price.grid(row=1, column=1)
-
-    cat_var = tk.StringVar()
-    cat_box = ttk.Combobox(win, textvariable=cat_var, state="readonly")
-    cat_box.grid(row=2, column=1)
-
-    s = Session()
-    cats = s.query(ItemCategory).all()
-    cat_box["values"] = [c.name for c in cats]
-    s.close()
+    e_type.grid(row=1, column=1)
+    e_price.grid(row=2, column=1)
+    e_vol.grid(row=3, column=1)
 
     def save():
         s = Session()
-        cat = s.query(ItemCategory).filter_by(name=cat_var.get()).first()
-        s.add(MenuItem(name=e_name.get(), price=float(e_price.get()), category=cat))
+        s.add(MenuItem(
+            name=e_name.get(),
+            type=e_type.get(),
+            selling_price=float(e_price.get() or 0),
+            volume_or_weight=e_vol.get()
+        ))
         s.commit()
         s.close()
         load_menu()
@@ -524,16 +542,20 @@ def create_customer():
     win.title("Новый клиент")
 
     tk.Label(win, text="Имя").grid(row=0, column=0)
-    tk.Label(win, text="Email").grid(row=1, column=0)
+    tk.Label(win, text="Телефон").grid(row=1, column=0)
+    tk.Label(win, text="Email").grid(row=2, column=0)
 
     e_name = tk.Entry(win)
+    e_phone = tk.Entry(win)
     e_email = tk.Entry(win)
+
     e_name.grid(row=0, column=1)
-    e_email.grid(row=1, column=1)
+    e_phone.grid(row=1, column=1)
+    e_email.grid(row=2, column=1)
 
     def save():
         s = Session()
-        s.add(Customer(name=e_name.get(), email=e_email.get()))
+        s.add(Customer(name=e_name.get(), phone=e_phone.get(), email=e_email.get()))
         s.commit()
         s.close()
         load_customers()
@@ -542,23 +564,6 @@ def create_customer():
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
-def create_category():
-    win = tk.Toplevel(root)
-    win.title("Новая категория")
-
-    tk.Label(win, text="Название").grid(row=0, column=0)
-    e_name = tk.Entry(win)
-    e_name.grid(row=0, column=1)
-
-    def save():
-        s = Session()
-        s.add(ItemCategory(name=e_name.get()))
-        s.commit()
-        s.close()
-        load_categories()
-        win.destroy()
-
-    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
 def export_report():
@@ -576,12 +581,12 @@ def export_report():
     sales = {}
 
     for o in orders:
-        day = o.created_at.date()
+        day = o.order_date.date()
         if day not in sales:
             sales[day] = {"orders": 0, "items": 0, "money": 0}
 
         sales[day]["orders"] += 1
-        for i in o.items:
+        for i in o.compositions:
             sales[day]["items"] += i.quantity
             sales[day]["money"] += i.total_price()
 
@@ -595,16 +600,16 @@ def export_report():
     # 2. ТОП БЛЮД
     # =====================================================
     ws_top = wb.create_sheet("Топ блюд")
-    ws_top.append(["Блюдо", "Категория", "Продано", "Выручка"])
+    ws_top.append(["Блюдо", "Тип", "Продано", "Выручка"])
 
     items = {}
-    order_items = s.query(OrderItem).join(MenuItem).outerjoin(ItemCategory).all()
+    order_items = s.query(OrderComposition).join(MenuItem).all()
 
     for oi in order_items:
         key = oi.menu_item.name
         if key not in items:
             items[key] = {
-                "cat": oi.menu_item.category.name if oi.menu_item.category else "",
+                "type": oi.menu_item.type,
                 "qty": 0,
                 "money": 0,
             }
@@ -613,7 +618,7 @@ def export_report():
         items[key]["money"] += oi.total_price()
 
     for name, v in sorted(items.items(), key=lambda x: x[1]["money"], reverse=True):
-        ws_top.append([name, v["cat"], v["qty"], round(v["money"], 2)])
+        ws_top.append([name, v["type"], v["qty"], round(v["money"], 2)])
 
     for c in ws_top[1]:
         c.font = Font(bold=True)
@@ -640,45 +645,33 @@ def export_report():
     # 4. ЭФФЕКТИВНОСТЬ СОТРУДНИКОВ
     # =====================================================
     ws_emp = wb.create_sheet("Эффективность")
-    ws_emp.append(["Сотрудник", "Часы", "Заработал", "₽/час"])
+    ws_emp.append(["Сотрудник", "Заказов", "Сумма заказов"])
 
-    shifts = s.query(Shift).join(Employee).all()
+    orders = s.query(Order).join(Employee).all()
     emp = {}
 
-    for sh in shifts:
-        name = f"{sh.employee.first_name} {sh.employee.last_name}"
+    for o in orders:
+        name = o.employee.fio
         if name not in emp:
-            emp[name] = {"hours": 0, "money": 0}
-
-        emp[name]["hours"] += sh.worked_hours()
-        emp[name]["money"] += sh.earned_money()
+            emp[name] = {"count": 0, "total": 0}
+        emp[name]["count"] += 1
+        emp[name]["total"] += o.total_amount
 
     for name, v in emp.items():
-        rate = round(v["money"] / v["hours"], 2) if v["hours"] else 0
-        ws_emp.append([name, round(v["hours"], 2), round(v["money"], 2), rate])
+        ws_emp.append([name, v["count"], round(v["total"], 2)])
 
     for c in ws_emp[1]:
         c.font = Font(bold=True)
 
     # =====================================================
-    # 5. ПРИБЫЛЬ
+    # 5. ПРИБЫЛЬ (упрощенно)
     # =====================================================
     ws_profit = wb.create_sheet("Прибыль")
-    ws_profit.append(["Выручка", "Зарплаты", "Прибыль", "Маржа %"])
+    ws_profit.append(["Выручка", "Прибыль"])
 
     revenue = sum(o.total() for o in orders)
-    salaries = sum(v["money"] for v in emp.values())
-    profit = revenue - salaries
-    margin = round((profit / revenue) * 100, 2) if revenue else 0
-
-    ws_profit.append(
-        [
-            round(revenue, 2),
-            round(salaries, 2),
-            round(profit, 2),
-            margin,
-        ]
-    )
+    
+    ws_profit.append([round(revenue, 2), round(revenue, 2)])
 
     for c in ws_profit[1]:
         c.font = Font(bold=True)
@@ -692,7 +685,7 @@ def export_report():
     hours = {}
 
     for o in orders:
-        h = o.created_at.hour
+        h = o.order_date.hour
         if h not in hours:
             hours[h] = {"count": 0, "money": 0}
 
@@ -739,7 +732,7 @@ tk.Button(
 # Customers
 fc = ttk.Frame(nb)
 nb.add(fc, text="Customers")
-customers_tree = create_table(fc, ("id", "name", "email"), ("ID", "Имя", "Email"))
+customers_tree = create_table(fc, ("id", "name", "phone", "email", "loyalty"), ("ID", "Имя", "Телефон", "Email", "Уровень"))
 tk.Button(fc, text="Добавить", command=create_customer).pack()
 tk.Button(
     fc,
@@ -748,25 +741,13 @@ tk.Button(
 ).pack()
 load_customers()
 
-# Positions
-fp = ttk.Frame(nb)
-nb.add(fp, text="Positions")
-positions_tree = create_table(fp, ("id", "name", "salary"), ("ID", "Название", "ЗП"))
-tk.Button(fp, text="Добавить", command=create_position).pack()
-tk.Button(
-    fp,
-    text="Удалить",
-    command=lambda: delete_selected(positions_tree, Position, load_positions),
-).pack()
-load_positions()
-
 # Employees
 fe = ttk.Frame(nb)
 nb.add(fe, text="Employees")
 employees_tree = create_table(
     fe,
-    ("id", "first", "last", "position"),
-    ("ID", "Имя", "Фамилия", "Должность"),
+    ("id", "fio", "role", "phone", "salary"),
+    ("ID", "ФИО", "Роль", "Телефон", "Зарплата"),
 )
 tk.Button(fe, text="Добавить", command=create_employee).pack()
 tk.Button(
@@ -776,25 +757,45 @@ tk.Button(
 ).pack()
 load_employees()
 
-# Categories
-fcat = ttk.Frame(nb)
-nb.add(fcat, text="Categories")
-categories_tree = create_table(fcat, ("id", "name"), ("ID", "Название"))
-tk.Button(fcat, text="Добавить", command=create_category).pack()
+# Suppliers
+fsup = ttk.Frame(nb)
+nb.add(fsup, text="Suppliers")
+suppliers_tree = create_table(
+    fsup,
+    ("id", "name", "phone", "email", "address"),
+    ("ID", "Название", "Телефон", "Email", "Адрес"),
+)
+tk.Button(fsup, text="Добавить", command=create_supplier).pack()
 tk.Button(
-    fcat,
+    fsup,
     text="Удалить",
-    command=lambda: delete_selected(categories_tree, ItemCategory, load_categories),
+    command=lambda: delete_selected(suppliers_tree, Supplier, load_suppliers),
 ).pack()
-load_categories()
+load_suppliers()
+
+# Ingredients
+fing = ttk.Frame(nb)
+nb.add(fing, text="Ingredients")
+ingredients_tree = create_table(
+    fing,
+    ("id", "name", "unit", "stock", "price"),
+    ("ID", "Название", "Ед. изм.", "Остаток", "Цена зак."),
+)
+tk.Button(fing, text="Добавить", command=create_ingredient).pack()
+tk.Button(
+    fing,
+    text="Удалить",
+    command=lambda: delete_selected(ingredients_tree, Ingredient, load_ingredients),
+).pack()
+load_ingredients()
 
 # Menu
 fm = ttk.Frame(nb)
 nb.add(fm, text="Menu")
 menu_tree = create_table(
     fm,
-    ("id", "name", "price", "category"),
-    ("ID", "Название", "Цена", "Категория"),
+    ("id", "name", "type", "price", "vol"),
+    ("ID", "Название", "Тип", "Цена прод.", "Объем/Вес"),
 )
 tk.Button(fm, text="Добавить", command=create_menu_item).pack()
 tk.Button(
@@ -804,41 +805,21 @@ tk.Button(
 ).pack()
 load_menu()
 
-# Shifts
-fs = ttk.Frame(nb)
-nb.add(fs, text="Shifts")
-
-shifts_tree = create_table(
-    fs,
-    ("id", "employee", "start", "end", "hours", "money"),
-    ("ID", "Сотрудник", "Начало", "Конец", "Часы", "Заработал"),
-)
-tk.Button(fs, text="Добавить", command=create_shift).pack()
-tk.Button(
-    fs,
-    text="Удалить",
-    command=lambda: delete_selected(shifts_tree, Shift, load_shifts),
-).pack()
-
-load_shifts()
-
 # Orders
 fo = ttk.Frame(nb)
 nb.add(fo, text="Orders")
 
 orders_tree = create_table(
     fo,
-    ("id", "customer", "employee", "date", "items", "total"),
-    ("ID", "Клиент", "Сотрудник", "Дата", "Позиций", "Сумма"),
+    ("id", "customer", "employee", "date", "items", "total", "status"),
+    ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Статус"),
 )
-
-tk.Button(fo, text="Новый заказ", command=create_order).pack()
+tk.Button(fo, text="Создать заказ", command=create_order, font=("Arial", 10, "bold")).pack()
 tk.Button(
     fo,
     text="Удалить",
     command=lambda: delete_selected(orders_tree, Order, load_orders),
 ).pack()
-
 load_orders()
 
 root.mainloop()
