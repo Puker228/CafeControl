@@ -169,23 +169,12 @@ FOR EACH ROW EXECUTE FUNCTION update_order_total();
 """
 
 # 2. DML Trigger: Логирование изменения цен
-trigger_dml_2_table = """
-CREATE TABLE IF NOT EXISTS price_logs (
-    id SERIAL PRIMARY KEY,
-    menu_item_id INTEGER,
-    old_price DECIMAL(10, 2),
-    new_price DECIMAL(10, 2),
-    change_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"""
-
 trigger_dml_2_func = """
 CREATE OR REPLACE FUNCTION log_price_change()
 RETURNS TRIGGER AS $$
 BEGIN
     IF OLD.selling_price IS DISTINCT FROM NEW.selling_price THEN
-        INSERT INTO price_logs (menu_item_id, old_price, new_price)
-        VALUES (OLD.id, OLD.selling_price, NEW.selling_price);
+        RAISE NOTICE 'Price change for MenuItem ID %: % -> %', OLD.id, OLD.selling_price, NEW.selling_price;
     END IF;
     RETURN NEW;
 END;
@@ -230,15 +219,6 @@ FOR EACH ROW EXECUTE FUNCTION check_stock_before_insert();
 
 # 4. DDL Trigger: Аудит изменений схемы (Event Trigger)
 # В PostgreSQL DDL триггеры создаются как EVENT TRIGGER.
-trigger_ddl_table = """
-CREATE TABLE IF NOT EXISTS schema_audit (
-    id SERIAL PRIMARY KEY,
-    event_type TEXT,
-    object_name TEXT,
-    tag TEXT,
-    event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"""
 
 trigger_ddl_func = """
 CREATE OR REPLACE FUNCTION log_ddl_event()
@@ -248,8 +228,7 @@ DECLARE
 BEGIN
     FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
     LOOP
-        INSERT INTO schema_audit (event_type, object_name, tag)
-        VALUES (TG_EVENT, obj.object_identity, TG_TAG);
+        RAISE NOTICE 'DDL Event: %, Object: %, Tag: %', TG_EVENT, obj.object_identity, TG_TAG;
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
@@ -268,12 +247,10 @@ with engine.connect() as conn:
     # Обычные DML/Table DDL можно в транзакции
     conn.execute(text(trigger_dml_1_func))
     conn.execute(text(trigger_dml_1))
-    conn.execute(text(trigger_dml_2_table))
     conn.execute(text(trigger_dml_2_func))
     conn.execute(text(trigger_dml_2))
     conn.execute(text(trigger_dml_3_func))
     conn.execute(text(trigger_dml_3))
-    conn.execute(text(trigger_ddl_table))
     conn.execute(text(trigger_ddl_func))
     # Event triggers в PG не могут быть созданы в блоке с другими командами иногда,
     # или требуют отдельного коммита.
@@ -605,13 +582,22 @@ def create_ingredient():
         if not e_name.get() or not sup_var.get():
             messagebox.showerror("Ошибка", "Заполните поля")
             return
+        
+        try:
+            qty = float(e_qty.get() or 0)
+            min_lvl = float(e_min.get() or 0)
+            price = float(e_price.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных. Поля 'Кол-во', 'Мин. уровень' и 'Цена' должны быть числовыми.")
+            return
+
         s = Session()
         s.add(Ingredient(
             name=e_name.get(),
             unit=e_unit.get(),
-            stock_quantity=float(e_qty.get() or 0),
-            min_stock_level=float(e_min.get() or 0),
-            purchase_price=float(e_price.get() or 0),
+            stock_quantity=qty,
+            min_stock_level=min_lvl,
+            purchase_price=price,
             supplier_id=sup_map[sup_var.get()]
         ))
         s.commit()
@@ -642,8 +628,14 @@ def create_employee():
     e_salary.grid(row=3, column=1)
 
     def save():
+        try:
+            salary = float(e_salary.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.")
+            return
+
         s = Session()
-        s.add(Employee(fio=e_fio.get(), role=e_role.get(), phone=e_phone.get(), salary=float(e_salary.get() or 0)))
+        s.add(Employee(fio=e_fio.get(), role=e_role.get(), phone=e_phone.get(), salary=salary))
         s.commit()
         s.close()
         load_employees()
@@ -672,11 +664,17 @@ def create_menu_item():
     e_vol.grid(row=3, column=1)
 
     def save():
+        try:
+            price = float(e_price.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Цена продажи' должно быть числовым.")
+            return
+
         s = Session()
         s.add(MenuItem(
             name=e_name.get(),
             type=e_type.get(),
-            selling_price=float(e_price.get() or 0),
+            selling_price=price,
             volume_or_weight=e_vol.get()
         ))
         s.commit()
