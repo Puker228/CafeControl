@@ -1,3 +1,4 @@
+import re
 import tkinter as tk
 import uuid
 from datetime import datetime, timedelta
@@ -268,6 +269,34 @@ except Exception as e:
 # ===================== HELPERS =====================
 
 
+def validate_russian_phone(phone: str) -> bool:
+    """
+    Валидация российского номера телефона.
+    Допустимые форматы:
+    +79991234567
+    89991234567
+    79991234567
+    9991234567
+    Также допускаются скобки, тире и пробелы, которые будут удалены перед проверкой.
+    """
+    # Удаляем все кроме цифр и начального плюса
+    cleaned = re.sub(r'[^\d+]', '', phone)
+    
+    # Регулярное выражение для российского мобильного/городского:
+    # Может начинаться с +7, 7, 8 или без префикса (тогда 10 цифр)
+    pattern = r'^(\+7|7|8)?[\s\-]?\(?[489][0-9]{2}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$'
+    
+    # Но проще проверить после очистки:
+    digits = re.sub(r'\D', '', cleaned)
+    
+    if len(digits) == 10:
+        return digits.startswith(('4', '8', '9')) # упрощенно
+    elif len(digits) == 11:
+        return digits.startswith(('7', '8'))
+    
+    return False
+
+
 def create_table(parent, columns, headers):
     tree = ttk.Treeview(parent, columns=columns, show="headings")
     for c, h in zip(columns, headers):
@@ -535,8 +564,14 @@ def create_supplier():
         if not e_name.get():
             messagebox.showerror("Ошибка", "Заполните название")
             return
+        
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+
         s = Session()
-        s.add(Supplier(name=e_name.get(), phone=e_phone.get(), email=e_email.get(), address=e_address.get()))
+        s.add(Supplier(name=e_name.get(), phone=phone, email=e_email.get(), address=e_address.get()))
         s.commit()
         s.close()
         load_suppliers()
@@ -634,8 +669,13 @@ def create_employee():
             messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.")
             return
 
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+
         s = Session()
-        s.add(Employee(fio=e_fio.get(), role=e_role.get(), phone=e_phone.get(), salary=salary))
+        s.add(Employee(fio=e_fio.get(), role=e_role.get(), phone=phone, salary=salary))
         s.commit()
         s.close()
         load_employees()
@@ -702,8 +742,13 @@ def create_customer():
     e_email.grid(row=2, column=1)
 
     def save():
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+
         s = Session()
-        s.add(Customer(name=e_name.get(), phone=e_phone.get(), email=e_email.get()))
+        s.add(Customer(name=e_name.get(), phone=phone, email=e_email.get()))
         s.commit()
         s.close()
         load_customers()

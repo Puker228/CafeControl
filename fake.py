@@ -9,17 +9,28 @@ from main import (
     Customer, Employee, Supplier, Ingredient, MenuItem, Order, OrderComposition
 )
 
-fake = Faker()
+fake = Faker('ru_RU')
 Faker.seed(42)
 random.seed(42)
 
 s = SessionLocal()
 
 # ===================== CUSTOMERS =====================
+def get_fake_ru_phone():
+    # Генерируем что-то вроде +7 (999) 123-45-67 или 89991234567
+    fmt = random.choice([
+        "+7 (9{0}{1}) {2}{3}{4}-{5}{6}-{7}{8}",
+        "89{0}{1}{2}{3}{4}{5}{6}{7}{8}",
+        "79{0}{1}{2}{3}{4}{5}{6}{7}{8}",
+        "+79{0}{1}{2}{3}{4}{5}{6}{7}{8}"
+    ])
+    digits = [random.randint(0, 9) for _ in range(9)]
+    return fmt.format(*digits)
+
 for _ in range(20):
     customer = Customer(
         name=fake.name(),
-        phone=fake.phone_number(),
+        phone=get_fake_ru_phone(),
         email=fake.unique.email(),
         loyalty_level=random.choice(["Bronze", "Silver", "Gold"]),
         discount_percent=random.choice([0.0, 5.0, 10.0])
@@ -32,7 +43,7 @@ for _ in range(20):
     employee = Employee(
         fio=fake.name(),
         role=random.choice(roles),
-        phone=fake.phone_number(),
+        phone=get_fake_ru_phone(),
         hire_date=fake.date_between(start_date='-2y', end_date='today'),
         salary=round(random.uniform(30000, 80000), 2)
     )
@@ -42,7 +53,7 @@ for _ in range(20):
 for _ in range(20):
     supplier = Supplier(
         name=fake.company(),
-        phone=fake.phone_number(),
+        phone=get_fake_ru_phone(),
         email=fake.unique.company_email(),
         address=fake.address()
     )
