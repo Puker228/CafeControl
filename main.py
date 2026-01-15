@@ -8,20 +8,21 @@ from uuid import UUID
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from sqlalchemy import ForeignKey, create_engine, Numeric
+from sqlalchemy import ForeignKey, create_engine, Numeric, event, text
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
     mapped_column,
     relationship,
     sessionmaker,
+    Session,
 )
 
 # ===================== DATABASE =====================
 
 
 class Base(DeclarativeBase):
-    id: Mapped[UUID] = mapped_column(default=uuid.uuid4, primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
 
 
 class Customer(Base):
@@ -41,7 +42,7 @@ class Customer(Base):
 class Employee(Base):
     __tablename__ = "employees"
     fio: Mapped[str]
-    role: Mapped[str]  # бармен, официант, администратор...
+    role: Mapped[str]  # бармен, официант, администратор и тд
     phone: Mapped[str]
     hire_date: Mapped[datetime] = mapped_column(default=datetime.now)
     salary: Mapped[float] = mapped_column(Numeric(10, 2))
@@ -67,7 +68,7 @@ class Ingredient(Base):
     min_stock_level: Mapped[float]
     purchase_price: Mapped[float] = mapped_column(Numeric(10, 2))
 
-    supplier_id: Mapped[UUID] = mapped_column(ForeignKey("suppliers.id"))
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
     supplier: Mapped["Supplier"] = relationship(back_populates="ingredients")
 
     recipes: Mapped[list["Recipe"]] = relationship(back_populates="ingredient")
@@ -86,8 +87,8 @@ class MenuItem(Base):
 
 class Recipe(Base):
     __tablename__ = "recipes"
-    menu_item_id: Mapped[UUID] = mapped_column(ForeignKey("menu_items.id"))
-    ingredient_id: Mapped[UUID] = mapped_column(ForeignKey("ingredients.id"))
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"))
+    ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"))
     quantity_required: Mapped[float]
     unit: Mapped[str]
 
@@ -104,10 +105,10 @@ class Order(Base):
     payment_method: Mapped[str]
     status: Mapped[str]
 
-    customer_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="orders")
 
-    employee_id: Mapped[UUID] = mapped_column(ForeignKey("employees.id"))
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
     employee: Mapped["Employee"] = relationship(back_populates="orders")
 
     compositions: Mapped[list["OrderComposition"]] = relationship(
@@ -121,10 +122,10 @@ class Order(Base):
 class OrderComposition(Base):
     __tablename__ = "order_compositions"
 
-    order_id: Mapped[UUID] = mapped_column(ForeignKey("orders.id"))
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
     order: Mapped["Order"] = relationship(back_populates="compositions")
 
-    menu_item_id: Mapped[UUID] = mapped_column(ForeignKey("menu_items.id"))
+    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"))
     menu_item: Mapped["MenuItem"] = relationship(back_populates="compositions")
 
     quantity: Mapped[int] = mapped_column(default=1)
@@ -134,10 +135,158 @@ class OrderComposition(Base):
         return round(float(self.price_at_sale) * self.quantity, 2)
 
 
-engine = create_engine("sqlite:///app.db", echo=False)
-
+engine = create_engine("postgresql+psycopg2://postgres:postgres@localhost:5434/postgres", echo=False)
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
+
+
+# ===================== TRIGGERS (3 DML & 1 DDL) =====================
+
+# В PostgreSQL триггеры обычно состоят из функции и самого триггера.
+
+# 1. DML Trigger: Обновление общей суммы заказа
+trigger_dml_1_func = """
+CREATE OR REPLACE FUNCTION update_order_total()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE orders
+    SET total_amount = (
+        SELECT COALESCE(SUM(quantity * price_at_sale), 0)
+        FROM order_compositions
+        WHERE order_id = NEW.order_id
+    )
+    WHERE id = NEW.order_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+trigger_dml_1 = """
+DROP TRIGGER IF EXISTS trg_update_order_total ON order_compositions;
+CREATE TRIGGER trg_update_order_total
+AFTER INSERT OR UPDATE OR DELETE ON order_compositions
+FOR EACH ROW EXECUTE FUNCTION update_order_total();
+"""
+
+# 2. DML Trigger: Логирование изменения цен
+trigger_dml_2_table = """
+CREATE TABLE IF NOT EXISTS price_logs (
+    id SERIAL PRIMARY KEY,
+    menu_item_id INTEGER,
+    old_price DECIMAL(10, 2),
+    new_price DECIMAL(10, 2),
+    change_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+trigger_dml_2_func = """
+CREATE OR REPLACE FUNCTION log_price_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.selling_price IS DISTINCT FROM NEW.selling_price THEN
+        INSERT INTO price_logs (menu_item_id, old_price, new_price)
+        VALUES (OLD.id, OLD.selling_price, NEW.selling_price);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+trigger_dml_2 = """
+DROP TRIGGER IF EXISTS trg_log_price_change ON menu_items;
+CREATE TRIGGER trg_log_price_change
+AFTER UPDATE OF selling_price ON menu_items
+FOR EACH ROW EXECUTE FUNCTION log_price_change();
+"""
+
+# 3. DML Trigger: Проверка наличия ингредиентов
+trigger_dml_3_func = """
+CREATE OR REPLACE FUNCTION check_stock_before_insert()
+RETURNS TRIGGER AS $$
+DECLARE
+    insufficient_ingredient TEXT;
+BEGIN
+    SELECT i.name INTO insufficient_ingredient
+    FROM recipes r
+    JOIN ingredients i ON r.ingredient_id = i.id
+    WHERE r.menu_item_id = NEW.menu_item_id
+      AND (i.stock_quantity - (r.quantity_required * NEW.quantity)) < 0
+    LIMIT 1;
+
+    IF insufficient_ingredient IS NOT NULL THEN
+        RAISE EXCEPTION 'Недостаточно ингредиента на складе: %', insufficient_ingredient;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+trigger_dml_3 = """
+DROP TRIGGER IF EXISTS trg_check_stock_before_insert ON order_compositions;
+CREATE TRIGGER trg_check_stock_before_insert
+BEFORE INSERT ON order_compositions
+FOR EACH ROW EXECUTE FUNCTION check_stock_before_insert();
+"""
+
+# 4. DDL Trigger: Аудит изменений схемы (Event Trigger)
+# В PostgreSQL DDL триггеры создаются как EVENT TRIGGER.
+trigger_ddl_table = """
+CREATE TABLE IF NOT EXISTS schema_audit (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT,
+    object_name TEXT,
+    tag TEXT,
+    event_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
+trigger_ddl_func = """
+CREATE OR REPLACE FUNCTION log_ddl_event()
+RETURNS event_trigger AS $$
+DECLARE
+    obj record;
+BEGIN
+    FOR obj IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        INSERT INTO schema_audit (event_type, object_name, tag)
+        VALUES (TG_EVENT, obj.object_identity, TG_TAG);
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+# Event trigger нельзя создать внутри транзакции в некоторых случаях, 
+# и он требует прав суперпользователя. 
+# Также он срабатывает на всю базу.
+trigger_ddl = """
+DROP EVENT TRIGGER IF EXISTS trg_audit_ddl;
+CREATE EVENT TRIGGER trg_audit_ddl ON ddl_command_end
+EXECUTE FUNCTION log_ddl_event();
+"""
+
+with engine.connect() as conn:
+    # Обычные DML/Table DDL можно в транзакции
+    conn.execute(text(trigger_dml_1_func))
+    conn.execute(text(trigger_dml_1))
+    conn.execute(text(trigger_dml_2_table))
+    conn.execute(text(trigger_dml_2_func))
+    conn.execute(text(trigger_dml_2))
+    conn.execute(text(trigger_dml_3_func))
+    conn.execute(text(trigger_dml_3))
+    conn.execute(text(trigger_ddl_table))
+    conn.execute(text(trigger_ddl_func))
+    # Event triggers в PG не могут быть созданы в блоке с другими командами иногда,
+    # или требуют отдельного коммита.
+    conn.commit()
+
+# Event trigger часто требует отдельного выполнения, так как он глобальный.
+try:
+    with engine.connect() as conn:
+        conn.execute(text(trigger_ddl))
+        conn.commit()
+except Exception as e:
+    print(f"Could not create event trigger (might need superuser): {e}")
+
 
 # ===================== HELPERS =====================
 
@@ -167,7 +316,7 @@ def delete_selected(tree, model, reload_func):
         return
 
     item = tree.item(selected[0])
-    record_id = UUID(item["values"][0])
+    record_id = int(item["values"][0])
 
     s = Session()
     obj = s.get(model, record_id)
@@ -359,27 +508,28 @@ def create_order():
         if customer_var.get() and customer_var.get() != "<Нет клиента>":
             c_id = customer_map[customer_var.get()]
 
-        order = Order(
-            customer_id=c_id,
-            employee_id=employee_map[employee_var.get()],
-            order_type=type_entry.get(),
-            payment_method=payment_entry.get(),
-            status="Новый"
-        )
-        s.add(order)
-        s.flush()
+        try:
+            order = Order(
+                customer_id=c_id,
+                employee_id=employee_map[employee_var.get()],
+                order_type=type_entry.get(),
+                payment_method=payment_entry.get(),
+                status="Новый"
+            )
+            s.add(order)
+            s.flush()
 
-        total = 0
-        for item_id, quantity, price in cart:
-            total += float(price) * quantity
-            s.add(OrderComposition(order_id=order.id, menu_item_id=item_id, quantity=quantity, price_at_sale=price))
+            for item_id, quantity, price in cart:
+                s.add(OrderComposition(order_id=order.id, menu_item_id=item_id, quantity=quantity, price_at_sale=price))
 
-        order.total_amount = total
-        s.commit()
-        s.close()
-
-        load_orders()
-        win.destroy()
+            s.commit()
+            load_orders()
+            win.destroy()
+        except Exception as e:
+            s.rollback()
+            messagebox.showerror("Ошибка", f"Не удалось сохранить заказ: {e}")
+        finally:
+            s.close()
 
     tk.Button(win, text="➕ Добавить в чек", command=add_to_cart).pack()
     tk.Button(win, text="💾 Сохранить заказ", command=save).pack()
