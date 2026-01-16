@@ -348,7 +348,7 @@ def get_selected_id(tree):
 
 def load_customers():
     s = Session()
-    rows = s.query(Customer.id, Customer.name, Customer.phone, Customer.email, Customer.loyalty_level).all()
+    rows = s.query(Customer.id, Customer.name, Customer.phone, Customer.email, Customer.loyalty_level, Customer.discount_percent).all()
     s.close()
     reload_tree(customers_tree, rows)
 
@@ -1323,7 +1323,7 @@ tk.Button(
 # Customers
 fc = ttk.Frame(nb)
 nb.add(fc, text="Customers")
-customers_tree = create_table(fc, ("id", "name", "phone", "email", "loyalty"), ("ID", "Имя", "Телефон", "Email", "Уровень"))
+customers_tree = create_table(fc, ("id", "name", "phone", "email", "loyalty", "discount"), ("ID", "Имя", "Телефон", "Email", "Уровень", "Скидка (%)"))
 tk.Button(fc, text="Добавить", command=create_customer).pack(side="left")
 tk.Button(fc, text="Редактировать", command=lambda: edit_customer(customers_tree)).pack(side="left")
 tk.Button(
