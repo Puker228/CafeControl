@@ -1161,133 +1161,138 @@ def export_report():
     s = Session()
     wb = Workbook()
 
+    def bold(ws):
+        for c in ws[1]:
+            c.font = Font(bold=True)
+
     # =====================================================
     # 1. ПРОДАЖИ ПО ДНЯМ
     # =====================================================
-    ws_sales = wb.active
-    ws_sales.title = "Продажи по дням"
-    ws_sales.append(["Дата", "Заказов", "Позиций", "Выручка"])
+    ws = wb.active
+    ws.title = "Продажи по дням"
+    ws.append(["Дата", "Заказов", "Позиций", "Выручка"])
 
-    orders = s.query(Order).all()
-    sales = {}
+    rows = s.execute(text("""
+        SELECT
+            DATE(o.order_date) AS day,
+            COUNT(DISTINCT o.id) AS orders,
+            SUM(oc.quantity) AS items,
+            SUM(oc.quantity * oc.price_at_sale) AS revenue
+        FROM orders o
+        JOIN order_compositions oc ON oc.order_id = o.id
+        GROUP BY day
+        ORDER BY day
+    """)).all()
 
-    for o in orders:
-        day = o.order_date.date()
-        if day not in sales:
-            sales[day] = {"orders": 0, "items": 0, "money": 0}
+    for r in rows:
+        ws.append(tuple(r))
 
-        sales[day]["orders"] += 1
-        for i in o.compositions:
-            sales[day]["items"] += i.quantity
-            sales[day]["money"] += i.total_price()
-
-    for d, v in sorted(sales.items()):
-        ws_sales.append([d, v["orders"], v["items"], round(v["money"], 2)])
-
-    for c in ws_sales[1]:
-        c.font = Font(bold=True)
+    bold(ws)
 
     # =====================================================
     # 2. ТОП БЛЮД
     # =====================================================
-    ws_top = wb.create_sheet("Топ блюд")
-    ws_top.append(["Блюдо", "Тип", "Продано", "Выручка"])
+    ws = wb.create_sheet("Топ блюд")
+    ws.append(["Блюдо", "Тип", "Продано", "Выручка"])
 
-    items = {}
-    order_items = s.query(OrderComposition).join(MenuItem).all()
+    rows = s.execute(text("""
+        SELECT
+            mi.name,
+            mi.type,
+            SUM(oc.quantity),
+            SUM(oc.quantity * oc.price_at_sale)
+        FROM order_compositions oc
+        JOIN menu_items mi ON mi.id = oc.menu_item_id
+        GROUP BY mi.name, mi.type
+        ORDER BY 4 DESC
+    """)).all()
 
-    for oi in order_items:
-        key = oi.menu_item.name
-        if key not in items:
-            items[key] = {
-                "type": oi.menu_item.type,
-                "qty": 0,
-                "money": 0,
-            }
+    for r in rows:
+        ws.append(tuple(r))
 
-        items[key]["qty"] += oi.quantity
-        items[key]["money"] += oi.total_price()
-
-    for name, v in sorted(items.items(), key=lambda x: x[1]["money"], reverse=True):
-        ws_top.append([name, v["type"], v["qty"], round(v["money"], 2)])
-
-    for c in ws_top[1]:
-        c.font = Font(bold=True)
+    bold(ws)
 
     # =====================================================
     # 3. КЛИЕНТЫ (LTV)
     # =====================================================
-    ws_clients = wb.create_sheet("Клиенты LTV")
-    ws_clients.append(["Клиент", "Email", "Заказов", "Сумма", "Средний чек"])
+    ws = wb.create_sheet("Клиенты LTV")
+    ws.append(["Клиент", "Email", "Заказов", "Сумма", "Средний чек"])
 
-    customers = s.query(Customer).all()
+    rows = s.execute(text("""
+        SELECT
+            c.name,
+            c.email,
+            COUNT(o.id),
+            COALESCE(SUM(oc.quantity * oc.price_at_sale), 0),
+            COALESCE(
+                SUM(oc.quantity * oc.price_at_sale) / NULLIF(COUNT(o.id), 0),
+                0
+            )
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.id
+        LEFT JOIN order_compositions oc ON oc.order_id = o.id
+        GROUP BY c.name, c.email
+    """)).all()
 
-    for cst in customers:
-        total = sum(o.total() for o in cst.orders)
-        count = len(cst.orders)
-        avg = round(total / count, 2) if count else 0
+    for r in rows:
+        ws.append(tuple(r))
 
-        ws_clients.append([cst.name, cst.email, count, round(total, 2), avg])
-
-    for c in ws_clients[1]:
-        c.font = Font(bold=True)
+    bold(ws)
 
     # =====================================================
     # 4. ЭФФЕКТИВНОСТЬ СОТРУДНИКОВ
     # =====================================================
-    ws_emp = wb.create_sheet("Эффективность")
-    ws_emp.append(["Сотрудник", "Заказов", "Сумма заказов"])
+    ws = wb.create_sheet("Эффективность")
+    ws.append(["Сотрудник", "Заказов", "Сумма заказов"])
 
-    orders = s.query(Order).join(Employee).all()
-    emp = {}
+    rows = s.execute(text("""
+        SELECT
+            e.fio,
+            COUNT(o.id),
+            SUM(o.total_amount)
+        FROM orders o
+        JOIN employees e ON e.id = o.employee_id
+        GROUP BY e.fio
+    """)).all()
 
-    for o in orders:
-        name = o.employee.fio
-        if name not in emp:
-            emp[name] = {"count": 0, "total": 0}
-        emp[name]["count"] += 1
-        emp[name]["total"] += o.total_amount
+    for r in rows:
+        ws.append(tuple(r))
 
-    for name, v in emp.items():
-        ws_emp.append([name, v["count"], round(v["total"], 2)])
-
-    for c in ws_emp[1]:
-        c.font = Font(bold=True)
+    bold(ws)
 
     # =====================================================
-    # 5. ПРИБЫЛЬ (упрощенно)
+    # 5. ПРИБЫЛЬ
     # =====================================================
-    ws_profit = wb.create_sheet("Прибыль")
-    ws_profit.append(["Выручка", "Прибыль"])
+    ws = wb.create_sheet("Прибыль")
+    ws.append(["Выручка", "Прибыль"])
 
-    revenue = sum(o.total() for o in orders)
-    
-    ws_profit.append([round(revenue, 2), round(revenue, 2)])
+    revenue = s.execute(text("""
+        SELECT COALESCE(SUM(total_amount), 0) FROM orders
+    """)).scalar()
 
-    for c in ws_profit[1]:
-        c.font = Font(bold=True)
+    ws.append([revenue, revenue])
+    bold(ws)
 
     # =====================================================
     # 6. НАГРУЗКА ПО ЧАСАМ
     # =====================================================
-    ws_hours = wb.create_sheet("Нагрузка по часам")
-    ws_hours.append(["Час", "Заказов", "Выручка"])
+    ws = wb.create_sheet("Нагрузка по часам")
+    ws.append(["Час", "Заказов", "Выручка"])
 
-    hours = {}
+    rows = s.execute(text("""
+        SELECT
+            EXTRACT(HOUR FROM order_date),
+            COUNT(*),
+            SUM(total_amount)
+        FROM orders
+        GROUP BY 1
+        ORDER BY 1
+    """)).all()
 
-    for o in orders:
-        h = o.order_date.hour
-        if h not in hours:
-            hours[h] = {"count": 0, "money": 0}
+    for h, cnt, money in rows:
+        ws.append([f"{int(h)}:00", cnt, money])
 
-        hours[h]["count"] += 1
-        hours[h]["money"] += o.total()
-
-    for h in sorted(hours):
-        ws_hours.append([f"{h}:00", hours[h]["count"], round(hours[h]["money"], 2)])
-
-    for c in ws_hours[1]:
-        c.font = Font(bold=True)
+    bold(ws)
 
     s.close()
 
@@ -1303,6 +1308,7 @@ def export_report():
     if file:
         wb.save(file)
         messagebox.showinfo("Готово", "Отчёт успешно сохранён!")
+
 
 
 # ===================== GUI =====================
