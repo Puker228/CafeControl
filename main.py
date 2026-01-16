@@ -1,22 +1,20 @@
 import re
 import tkinter as tk
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from tkinter import messagebox, ttk
 from tkinter.filedialog import asksaveasfilename
 from typing import Optional
-from uuid import UUID
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
-from sqlalchemy import ForeignKey, create_engine, Numeric, event, text
+from sqlalchemy import ForeignKey, Numeric, create_engine, text
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
+    Session,
     mapped_column,
     relationship,
     sessionmaker,
-    Session,
 )
 
 # ===================== DATABASE =====================
@@ -82,7 +80,9 @@ class MenuItem(Base):
     selling_price: Mapped[float] = mapped_column(Numeric(10, 2))
     volume_or_weight: Mapped[str]
 
-    compositions: Mapped[list["OrderComposition"]] = relationship(back_populates="menu_item")
+    compositions: Mapped[list["OrderComposition"]] = relationship(
+        back_populates="menu_item"
+    )
     recipes: Mapped[list["Recipe"]] = relationship(back_populates="menu_item")
 
 
@@ -106,7 +106,9 @@ class Order(Base):
     payment_method: Mapped[str]
     status: Mapped[str]
 
-    customer_id: Mapped[Optional[int]] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    customer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("customers.id"), nullable=True
+    )
     customer: Mapped[Optional["Customer"]] = relationship(back_populates="orders")
 
     employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
@@ -136,7 +138,9 @@ class OrderComposition(Base):
         return round(float(self.price_at_sale) * self.quantity, 2)
 
 
-engine = create_engine("postgresql+psycopg2://postgres:postgres@localhost:5434/postgres", echo=False)
+engine = create_engine(
+    "postgresql+psycopg2://postgres:postgres@localhost:5434/postgres", echo=False
+)
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
@@ -235,8 +239,8 @@ END;
 $$ LANGUAGE plpgsql;
 """
 
-# Event trigger нельзя создать внутри транзакции в некоторых случаях, 
-# и он требует прав суперпользователя. 
+# Event trigger нельзя создать внутри транзакции в некоторых случаях,
+# и он требует прав суперпользователя.
 # Также он срабатывает на всю базу.
 trigger_ddl = """
 DROP EVENT TRIGGER IF EXISTS trg_audit_ddl;
@@ -280,20 +284,20 @@ def validate_russian_phone(phone: str) -> bool:
     Также допускаются скобки, тире и пробелы, которые будут удалены перед проверкой.
     """
     # Удаляем все кроме цифр и начального плюса
-    cleaned = re.sub(r'[^\d+]', '', phone)
-    
+    cleaned = re.sub(r"[^\d+]", "", phone)
+
     # Регулярное выражение для российского мобильного/городского:
     # Может начинаться с +7, 7, 8 или без префикса (тогда 10 цифр)
-    pattern = r'^(\+7|7|8)?[\s\-]?\(?[489][0-9]{2}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$'
-    
+    pattern = r"^(\+7|7|8)?[\s\-]?\(?[489][0-9]{2}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$"
+
     # Но проще проверить после очистки:
-    digits = re.sub(r'\D', '', cleaned)
-    
+    digits = re.sub(r"\D", "", cleaned)
+
     if len(digits) == 10:
-        return digits.startswith(('4', '8', '9')) # упрощенно
+        return digits.startswith(("4", "8", "9"))  # упрощенно
     elif len(digits) == 11:
-        return digits.startswith(('7', '8'))
-    
+        return digits.startswith(("7", "8"))
+
     return False
 
 
@@ -348,21 +352,36 @@ def get_selected_id(tree):
 
 def load_customers():
     s = Session()
-    rows = s.query(Customer.id, Customer.name, Customer.phone, Customer.email, Customer.loyalty_level, Customer.discount_percent).all()
+    rows = s.query(
+        Customer.id,
+        Customer.name,
+        Customer.phone,
+        Customer.email,
+        Customer.loyalty_level,
+        Customer.discount_percent,
+    ).all()
     s.close()
     reload_tree(customers_tree, rows)
 
 
 def load_suppliers():
     s = Session()
-    rows = s.query(Supplier.id, Supplier.name, Supplier.phone, Supplier.email, Supplier.address).all()
+    rows = s.query(
+        Supplier.id, Supplier.name, Supplier.phone, Supplier.email, Supplier.address
+    ).all()
     s.close()
     reload_tree(suppliers_tree, rows)
 
 
 def load_ingredients():
     s = Session()
-    rows = s.query(Ingredient.id, Ingredient.name, Ingredient.unit, Ingredient.stock_quantity, Ingredient.purchase_price).all()
+    rows = s.query(
+        Ingredient.id,
+        Ingredient.name,
+        Ingredient.unit,
+        Ingredient.stock_quantity,
+        Ingredient.purchase_price,
+    ).all()
     s.close()
     reload_tree(ingredients_tree, rows)
 
@@ -382,7 +401,7 @@ def load_orders():
                 o.order_date.strftime("%Y-%m-%d %H:%M"),
                 len(o.compositions),
                 o.total(),
-                o.status
+                o.status,
             )
         )
 
@@ -392,20 +411,22 @@ def load_orders():
 
 def load_employees():
     s = Session()
-    rows = (
-        s.query(Employee.id, Employee.fio, Employee.role, Employee.phone, Employee.salary)
-        .all()
-    )
+    rows = s.query(
+        Employee.id, Employee.fio, Employee.role, Employee.phone, Employee.salary
+    ).all()
     s.close()
     reload_tree(employees_tree, rows)
 
 
 def load_menu():
     s = Session()
-    rows = (
-        s.query(MenuItem.id, MenuItem.name, MenuItem.type, MenuItem.selling_price, MenuItem.volume_or_weight)
-        .all()
-    )
+    rows = s.query(
+        MenuItem.id,
+        MenuItem.name,
+        MenuItem.type,
+        MenuItem.selling_price,
+        MenuItem.volume_or_weight,
+    ).all()
     s.close()
     reload_tree(menu_tree, rows)
 
@@ -413,7 +434,10 @@ def load_menu():
 def load_recipes():
     s = Session()
     items = s.query(Recipe).all()
-    rows = [(r.id, r.menu_item.name, r.ingredient.name, r.quantity_required, r.unit) for r in items]
+    rows = [
+        (r.id, r.menu_item.name, r.ingredient.name, r.quantity_required, r.unit)
+        for r in items
+    ]
     s.close()
     reload_tree(recipes_tree, rows)
 
@@ -422,7 +446,14 @@ def load_order_compositions():
     s = Session()
     items = s.query(OrderComposition).all()
     rows = [
-        (c.id, c.order_id, c.menu_item.name, c.quantity, c.price_at_sale, c.total_price())
+        (
+            c.id,
+            c.order_id,
+            c.menu_item.name,
+            c.quantity,
+            c.price_at_sale,
+            c.total_price(),
+        )
         for c in items
     ]
     s.close()
@@ -548,13 +579,20 @@ def create_order():
                 employee_id=employee_map[employee_var.get()],
                 order_type=type_entry.get(),
                 payment_method=payment_entry.get(),
-                status="Новый"
+                status="Новый",
             )
             s.add(order)
             s.flush()
 
             for item_id, quantity, price in cart:
-                s.add(OrderComposition(order_id=order.id, menu_item_id=item_id, quantity=quantity, price_at_sale=price))
+                s.add(
+                    OrderComposition(
+                        order_id=order.id,
+                        menu_item_id=item_id,
+                        quantity=quantity,
+                        price_at_sale=price,
+                    )
+                )
 
             s.commit()
             load_orders()
@@ -592,14 +630,21 @@ def create_supplier():
         if not e_name.get():
             messagebox.showerror("Ошибка", "Заполните название")
             return
-        
+
         phone = e_phone.get()
         if phone and not validate_russian_phone(phone):
             messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
             return
 
         s = Session()
-        s.add(Supplier(name=e_name.get(), phone=phone, email=e_email.get(), address=e_address.get()))
+        s.add(
+            Supplier(
+                name=e_name.get(),
+                phone=phone,
+                email=e_email.get(),
+                address=e_address.get(),
+            )
+        )
         s.commit()
         s.close()
         load_suppliers()
@@ -645,24 +690,29 @@ def create_ingredient():
         if not e_name.get() or not sup_var.get():
             messagebox.showerror("Ошибка", "Заполните поля")
             return
-        
+
         try:
             qty = float(e_qty.get() or 0)
             min_lvl = float(e_min.get() or 0)
             price = float(e_price.get() or 0)
         except ValueError:
-            messagebox.showerror("Ошибка", "Некорректный тип данных. Поля 'Кол-во', 'Мин. уровень' и 'Цена' должны быть числовыми.")
+            messagebox.showerror(
+                "Ошибка",
+                "Некорректный тип данных. Поля 'Кол-во', 'Мин. уровень' и 'Цена' должны быть числовыми.",
+            )
             return
 
         s = Session()
-        s.add(Ingredient(
-            name=e_name.get(),
-            unit=e_unit.get(),
-            stock_quantity=qty,
-            min_stock_level=min_lvl,
-            purchase_price=price,
-            supplier_id=sup_map[sup_var.get()]
-        ))
+        s.add(
+            Ingredient(
+                name=e_name.get(),
+                unit=e_unit.get(),
+                stock_quantity=qty,
+                min_stock_level=min_lvl,
+                purchase_price=price,
+                supplier_id=sup_map[sup_var.get()],
+            )
+        )
         s.commit()
         s.close()
         load_ingredients()
@@ -694,7 +744,10 @@ def create_employee():
         try:
             salary = float(e_salary.get() or 0)
         except ValueError:
-            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.")
+            messagebox.showerror(
+                "Ошибка",
+                "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.",
+            )
             return
 
         phone = e_phone.get()
@@ -735,16 +788,21 @@ def create_menu_item():
         try:
             price = float(e_price.get() or 0)
         except ValueError:
-            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Цена продажи' должно быть числовым.")
+            messagebox.showerror(
+                "Ошибка",
+                "Некорректный тип данных. Поле 'Цена продажи' должно быть числовым.",
+            )
             return
 
         s = Session()
-        s.add(MenuItem(
-            name=e_name.get(),
-            type=e_type.get(),
-            selling_price=price,
-            volume_or_weight=e_vol.get()
-        ))
+        s.add(
+            MenuItem(
+                name=e_name.get(),
+                type=e_type.get(),
+                selling_price=price,
+                volume_or_weight=e_vol.get(),
+            )
+        )
         s.commit()
         s.close()
         load_menu()
@@ -799,9 +857,16 @@ def edit_customer(tree):
     tk.Label(win, text="Имя").grid(row=0, column=0)
     tk.Label(win, text="Телефон").grid(row=1, column=0)
     tk.Label(win, text="Email").grid(row=2, column=0)
-    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
-    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=1, column=1)
-    e_email = tk.Entry(win); e_email.insert(0, obj.email); e_email.grid(row=2, column=1)
+    e_name = tk.Entry(win)
+    e_name.insert(0, obj.name)
+    e_name.grid(row=0, column=1)
+    e_phone = tk.Entry(win)
+    e_phone.insert(0, obj.phone)
+    e_phone.grid(row=1, column=1)
+    e_email = tk.Entry(win)
+    e_email.insert(0, obj.email)
+    e_email.grid(row=2, column=1)
+
     def save():
         phone = e_phone.get()
         if phone and not validate_russian_phone(phone):
@@ -812,9 +877,11 @@ def edit_customer(tree):
         o.name = e_name.get()
         o.phone = phone
         o.email = e_email.get()
-        s2.commit(); s2.close()
+        s2.commit()
+        s2.close()
         load_customers()
         win.destroy()
+
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
 
@@ -834,15 +901,27 @@ def edit_employee(tree):
     tk.Label(win, text="Роль").grid(row=1, column=0)
     tk.Label(win, text="Телефон").grid(row=2, column=0)
     tk.Label(win, text="Зарплата").grid(row=3, column=0)
-    e_fio = tk.Entry(win); e_fio.insert(0, obj.fio); e_fio.grid(row=0, column=1)
-    e_role = tk.Entry(win); e_role.insert(0, obj.role); e_role.grid(row=1, column=1)
-    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=2, column=1)
-    e_salary = tk.Entry(win); e_salary.insert(0, str(obj.salary)); e_salary.grid(row=3, column=1)
+    e_fio = tk.Entry(win)
+    e_fio.insert(0, obj.fio)
+    e_fio.grid(row=0, column=1)
+    e_role = tk.Entry(win)
+    e_role.insert(0, obj.role)
+    e_role.grid(row=1, column=1)
+    e_phone = tk.Entry(win)
+    e_phone.insert(0, obj.phone)
+    e_phone.grid(row=2, column=1)
+    e_salary = tk.Entry(win)
+    e_salary.insert(0, str(obj.salary))
+    e_salary.grid(row=3, column=1)
+
     def save():
         try:
             salary = float(e_salary.get() or 0)
         except ValueError:
-            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.")
+            messagebox.showerror(
+                "Ошибка",
+                "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.",
+            )
             return
         phone = e_phone.get()
         if phone and not validate_russian_phone(phone):
@@ -854,9 +933,11 @@ def edit_employee(tree):
         o.role = e_role.get()
         o.phone = phone
         o.salary = salary
-        s2.commit(); s2.close()
+        s2.commit()
+        s2.close()
         load_employees()
         win.destroy()
+
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
 
@@ -876,10 +957,19 @@ def edit_supplier(tree):
     tk.Label(win, text="Телефон").grid(row=1, column=0)
     tk.Label(win, text="Email").grid(row=2, column=0)
     tk.Label(win, text="Адрес").grid(row=3, column=0)
-    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
-    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=1, column=1)
-    e_email = tk.Entry(win); e_email.insert(0, obj.email); e_email.grid(row=2, column=1)
-    e_address = tk.Entry(win); e_address.insert(0, obj.address); e_address.grid(row=3, column=1)
+    e_name = tk.Entry(win)
+    e_name.insert(0, obj.name)
+    e_name.grid(row=0, column=1)
+    e_phone = tk.Entry(win)
+    e_phone.insert(0, obj.phone)
+    e_phone.grid(row=1, column=1)
+    e_email = tk.Entry(win)
+    e_email.insert(0, obj.email)
+    e_email.grid(row=2, column=1)
+    e_address = tk.Entry(win)
+    e_address.insert(0, obj.address)
+    e_address.grid(row=3, column=1)
+
     def save():
         if not e_name.get():
             messagebox.showerror("Ошибка", "Заполните название")
@@ -894,9 +984,11 @@ def edit_supplier(tree):
         o.phone = phone
         o.email = e_email.get()
         o.address = e_address.get()
-        s2.commit(); s2.close()
+        s2.commit()
+        s2.close()
         load_suppliers()
         win.destroy()
+
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
 
@@ -918,11 +1010,21 @@ def edit_ingredient(tree):
     tk.Label(win, text="Мин. уровень").grid(row=3, column=0)
     tk.Label(win, text="Цена закупки").grid(row=4, column=0)
     tk.Label(win, text="Поставщик").grid(row=5, column=0)
-    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
-    e_unit = tk.Entry(win); e_unit.insert(0, obj.unit); e_unit.grid(row=1, column=1)
-    e_qty = tk.Entry(win); e_qty.insert(0, str(obj.stock_quantity)); e_qty.grid(row=2, column=1)
-    e_min = tk.Entry(win); e_min.insert(0, str(obj.min_stock_level)); e_min.grid(row=3, column=1)
-    e_price = tk.Entry(win); e_price.insert(0, str(obj.purchase_price)); e_price.grid(row=4, column=1)
+    e_name = tk.Entry(win)
+    e_name.insert(0, obj.name)
+    e_name.grid(row=0, column=1)
+    e_unit = tk.Entry(win)
+    e_unit.insert(0, obj.unit)
+    e_unit.grid(row=1, column=1)
+    e_qty = tk.Entry(win)
+    e_qty.insert(0, str(obj.stock_quantity))
+    e_qty.grid(row=2, column=1)
+    e_min = tk.Entry(win)
+    e_min.insert(0, str(obj.min_stock_level))
+    e_min.grid(row=3, column=1)
+    e_price = tk.Entry(win)
+    e_price.insert(0, str(obj.purchase_price))
+    e_price.grid(row=4, column=1)
     sup_var = tk.StringVar()
     sup_box = ttk.Combobox(win, textvariable=sup_var, state="readonly")
     sup_box.grid(row=5, column=1)
@@ -933,6 +1035,7 @@ def edit_ingredient(tree):
         if sid == obj.supplier_id:
             sup_box.set(name)
             break
+
     def save():
         if not e_name.get() or not sup_var.get():
             messagebox.showerror("Ошибка", "Заполните поля")
@@ -952,9 +1055,11 @@ def edit_ingredient(tree):
         o.min_stock_level = min_lvl
         o.purchase_price = price
         o.supplier_id = sup_map[sup_var.get()]
-        s2.commit(); s2.close()
+        s2.commit()
+        s2.close()
         load_ingredients()
         win.destroy()
+
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
 
@@ -974,10 +1079,19 @@ def edit_menu_item(tree):
     tk.Label(win, text="Тип").grid(row=1, column=0)
     tk.Label(win, text="Цена продажи").grid(row=2, column=0)
     tk.Label(win, text="Объем/Вес").grid(row=3, column=0)
-    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
-    e_type = tk.Entry(win); e_type.insert(0, obj.type); e_type.grid(row=1, column=1)
-    e_price = tk.Entry(win); e_price.insert(0, str(obj.selling_price)); e_price.grid(row=2, column=1)
-    e_vol = tk.Entry(win); e_vol.insert(0, obj.volume_or_weight); e_vol.grid(row=3, column=1)
+    e_name = tk.Entry(win)
+    e_name.insert(0, obj.name)
+    e_name.grid(row=0, column=1)
+    e_type = tk.Entry(win)
+    e_type.insert(0, obj.type)
+    e_type.grid(row=1, column=1)
+    e_price = tk.Entry(win)
+    e_price.insert(0, str(obj.selling_price))
+    e_price.grid(row=2, column=1)
+    e_vol = tk.Entry(win)
+    e_vol.insert(0, obj.volume_or_weight)
+    e_vol.grid(row=3, column=1)
+
     def save():
         try:
             price = float(e_price.get() or 0)
@@ -990,9 +1104,11 @@ def edit_menu_item(tree):
         o.type = e_type.get()
         o.selling_price = price
         o.volume_or_weight = e_vol.get()
-        s2.commit(); s2.close()
+        s2.commit()
+        s2.close()
         load_menu()
         win.destroy()
+
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
 
@@ -1047,12 +1163,14 @@ def edit_order(tree):
 
     cart = []
     for comp in order.compositions:
-        cart.append({
-            "id": comp.menu_item_id,
-            "name": comp.menu_item.name,
-            "quantity": comp.quantity,
-            "price": comp.price_at_sale
-        })
+        cart.append(
+            {
+                "id": comp.menu_item_id,
+                "name": comp.menu_item.name,
+                "quantity": comp.quantity,
+                "price": comp.price_at_sale,
+            }
+        )
 
     cart_box = tk.Listbox(win, height=6)
     cart_box.pack(fill="both", expand=True)
@@ -1081,12 +1199,15 @@ def edit_order(tree):
         customer_box.set("<Нет клиента>")
 
     items = s.query(MenuItem).all()
-    item_map = {f"{i.name} ({i.selling_price})": (i.id, i.selling_price, i.name) for i in items}
+    item_map = {
+        f"{i.name} ({i.selling_price})": (i.id, i.selling_price, i.name) for i in items
+    }
     menu_list.insert("end", *item_map.keys())
 
     def add_to_cart():
         sel = menu_list.curselection()
-        if not sel: return
+        if not sel:
+            return
         key = menu_list.get(sel)
         item_id, price, name = item_map[key]
         try:
@@ -1094,20 +1215,21 @@ def edit_order(tree):
         except ValueError:
             messagebox.showerror("Ошибка", "Количество должно быть числом")
             return
-        
+
         # Если такой товар уже есть, прибавляем
         for i in cart:
             if i["id"] == item_id:
                 i["quantity"] += quantity
                 refresh_cart_box()
                 return
-        
+
         cart.append({"id": item_id, "name": name, "quantity": quantity, "price": price})
         refresh_cart_box()
 
     def remove_from_cart():
         sel = cart_box.curselection()
-        if not sel: return
+        if not sel:
+            return
         cart.pop(sel[0])
         refresh_cart_box()
 
@@ -1132,15 +1254,19 @@ def edit_order(tree):
             o.status = status_entry.get()
 
             # Обновляем состав: проще всего удалить старые и добавить новые
-            s2.query(OrderComposition).filter(OrderComposition.order_id == record_id).delete()
+            s2.query(OrderComposition).filter(
+                OrderComposition.order_id == record_id
+            ).delete()
             for i in cart:
-                s2.add(OrderComposition(
-                    order_id=record_id,
-                    menu_item_id=i["id"],
-                    quantity=i["quantity"],
-                    price_at_sale=i["price"]
-                ))
-            
+                s2.add(
+                    OrderComposition(
+                        order_id=record_id,
+                        menu_item_id=i["id"],
+                        quantity=i["quantity"],
+                        price_at_sale=i["price"],
+                    )
+                )
+
             s2.commit()
             load_orders()
             win.destroy()
@@ -1152,8 +1278,10 @@ def edit_order(tree):
 
     tk.Button(win, text="➕ Добавить", command=add_to_cart).pack(side="top")
     tk.Button(win, text="❌ Удалить позицию", command=remove_from_cart).pack(side="top")
-    tk.Button(win, text="💾 Сохранить изменения", command=save, bg="green", fg="white").pack(pady=10)
-    
+    tk.Button(
+        win, text="💾 Сохранить изменения", command=save, bg="green", fg="white"
+    ).pack(pady=10)
+
     s.close()
 
 
@@ -1172,7 +1300,8 @@ def export_report():
     ws.title = "Продажи по дням"
     ws.append(["Дата", "Заказов", "Позиций", "Выручка"])
 
-    rows = s.execute(text("""
+    rows = s.execute(
+        text("""
         SELECT
             DATE(o.order_date) AS day,
             COUNT(DISTINCT o.id) AS orders,
@@ -1182,7 +1311,8 @@ def export_report():
         JOIN order_compositions oc ON oc.order_id = o.id
         GROUP BY day
         ORDER BY day
-    """)).all()
+    """)
+    ).all()
 
     for r in rows:
         ws.append(tuple(r))
@@ -1195,7 +1325,8 @@ def export_report():
     ws = wb.create_sheet("Топ блюд")
     ws.append(["Блюдо", "Тип", "Продано", "Выручка"])
 
-    rows = s.execute(text("""
+    rows = s.execute(
+        text("""
         SELECT
             mi.name,
             mi.type,
@@ -1205,7 +1336,8 @@ def export_report():
         JOIN menu_items mi ON mi.id = oc.menu_item_id
         GROUP BY mi.name, mi.type
         ORDER BY 4 DESC
-    """)).all()
+    """)
+    ).all()
 
     for r in rows:
         ws.append(tuple(r))
@@ -1218,7 +1350,8 @@ def export_report():
     ws = wb.create_sheet("Клиенты LTV")
     ws.append(["Клиент", "Email", "Заказов", "Сумма", "Средний чек"])
 
-    rows = s.execute(text("""
+    rows = s.execute(
+        text("""
         SELECT
             c.name,
             c.email,
@@ -1232,7 +1365,8 @@ def export_report():
         LEFT JOIN orders o ON o.customer_id = c.id
         LEFT JOIN order_compositions oc ON oc.order_id = o.id
         GROUP BY c.name, c.email
-    """)).all()
+    """)
+    ).all()
 
     for r in rows:
         ws.append(tuple(r))
@@ -1245,7 +1379,8 @@ def export_report():
     ws = wb.create_sheet("Эффективность")
     ws.append(["Сотрудник", "Заказов", "Сумма заказов"])
 
-    rows = s.execute(text("""
+    rows = s.execute(
+        text("""
         SELECT
             e.fio,
             COUNT(o.id),
@@ -1253,7 +1388,8 @@ def export_report():
         FROM orders o
         JOIN employees e ON e.id = o.employee_id
         GROUP BY e.fio
-    """)).all()
+    """)
+    ).all()
 
     for r in rows:
         ws.append(tuple(r))
@@ -1266,9 +1402,11 @@ def export_report():
     ws = wb.create_sheet("Прибыль")
     ws.append(["Выручка", "Прибыль"])
 
-    revenue = s.execute(text("""
+    revenue = s.execute(
+        text("""
         SELECT COALESCE(SUM(total_amount), 0) FROM orders
-    """)).scalar()
+    """)
+    ).scalar()
 
     ws.append([revenue, revenue])
     bold(ws)
@@ -1279,7 +1417,8 @@ def export_report():
     ws = wb.create_sheet("Нагрузка по часам")
     ws.append(["Час", "Заказов", "Выручка"])
 
-    rows = s.execute(text("""
+    rows = s.execute(
+        text("""
         SELECT
             EXTRACT(HOUR FROM order_date),
             COUNT(*),
@@ -1287,7 +1426,8 @@ def export_report():
         FROM orders
         GROUP BY 1
         ORDER BY 1
-    """)).all()
+    """)
+    ).all()
 
     for h, cnt, money in rows:
         ws.append([f"{int(h)}:00", cnt, money])
@@ -1310,7 +1450,6 @@ def export_report():
         messagebox.showinfo("Готово", "Отчёт успешно сохранён!")
 
 
-
 # ===================== GUI =====================
 
 root = tk.Tk()
@@ -1329,9 +1468,15 @@ tk.Button(
 # Customers
 fc = ttk.Frame(nb)
 nb.add(fc, text="Customers")
-customers_tree = create_table(fc, ("id", "name", "phone", "email", "loyalty", "discount"), ("ID", "Имя", "Телефон", "Email", "Уровень", "Скидка (%)"))
+customers_tree = create_table(
+    fc,
+    ("id", "name", "phone", "email", "loyalty", "discount"),
+    ("ID", "Имя", "Телефон", "Email", "Уровень", "Скидка (%)"),
+)
 tk.Button(fc, text="Добавить", command=create_customer).pack(side="left")
-tk.Button(fc, text="Редактировать", command=lambda: edit_customer(customers_tree)).pack(side="left")
+tk.Button(fc, text="Редактировать", command=lambda: edit_customer(customers_tree)).pack(
+    side="left"
+)
 tk.Button(
     fc,
     text="Удалить",
@@ -1348,7 +1493,9 @@ employees_tree = create_table(
     ("ID", "ФИО", "Роль", "Телефон", "Зарплата"),
 )
 tk.Button(fe, text="Добавить", command=create_employee).pack(side="left")
-tk.Button(fe, text="Редактировать", command=lambda: edit_employee(employees_tree)).pack(side="left")
+tk.Button(fe, text="Редактировать", command=lambda: edit_employee(employees_tree)).pack(
+    side="left"
+)
 tk.Button(
     fe,
     text="Удалить",
@@ -1365,7 +1512,9 @@ suppliers_tree = create_table(
     ("ID", "Название", "Телефон", "Email", "Адрес"),
 )
 tk.Button(fsup, text="Добавить", command=create_supplier).pack(side="left")
-tk.Button(fsup, text="Редактировать", command=lambda: edit_supplier(suppliers_tree)).pack(side="left")
+tk.Button(
+    fsup, text="Редактировать", command=lambda: edit_supplier(suppliers_tree)
+).pack(side="left")
 tk.Button(
     fsup,
     text="Удалить",
@@ -1382,7 +1531,9 @@ ingredients_tree = create_table(
     ("ID", "Название", "Ед. изм.", "Остаток", "Цена зак."),
 )
 tk.Button(fing, text="Добавить", command=create_ingredient).pack(side="left")
-tk.Button(fing, text="Редактировать", command=lambda: edit_ingredient(ingredients_tree)).pack(side="left")
+tk.Button(
+    fing, text="Редактировать", command=lambda: edit_ingredient(ingredients_tree)
+).pack(side="left")
 tk.Button(
     fing,
     text="Удалить",
@@ -1399,7 +1550,9 @@ menu_tree = create_table(
     ("ID", "Название", "Тип", "Цена прод.", "Объем/Вес"),
 )
 tk.Button(fm, text="Добавить", command=create_menu_item).pack(side="left")
-tk.Button(fm, text="Редактировать", command=lambda: edit_menu_item(menu_tree)).pack(side="left")
+tk.Button(fm, text="Редактировать", command=lambda: edit_menu_item(menu_tree)).pack(
+    side="left"
+)
 tk.Button(
     fm,
     text="Удалить",
@@ -1416,8 +1569,12 @@ orders_tree = create_table(
     ("id", "customer", "employee", "date", "items", "total", "status"),
     ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Статус"),
 )
-tk.Button(fo, text="Добавить", command=create_order, font=("Arial", 10, "bold")).pack(side="left")
-tk.Button(fo, text="Редактировать", command=lambda: edit_order(orders_tree)).pack(side="left")
+tk.Button(fo, text="Добавить", command=create_order, font=("Arial", 10, "bold")).pack(
+    side="left"
+)
+tk.Button(fo, text="Редактировать", command=lambda: edit_order(orders_tree)).pack(
+    side="left"
+)
 tk.Button(
     fo,
     text="Удалить",
@@ -1451,7 +1608,9 @@ compositions_tree = create_table(
 tk.Button(
     foc,
     text="Удалить",
-    command=lambda: delete_selected(compositions_tree, OrderComposition, load_order_compositions),
+    command=lambda: delete_selected(
+        compositions_tree, OrderComposition, load_order_compositions
+    ),
 ).pack(side="left")
 load_order_compositions()
 

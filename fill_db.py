@@ -1,11 +1,19 @@
-from sqlalchemy import text
-from main import engine, Session as SessionLocal, Base
 from datetime import datetime, timedelta
+
+from sqlalchemy import text
+
+from main import Session as SessionLocal
+from main import engine
+
 
 def fill_db():
     with engine.connect() as conn:
         # Очистка таблиц (в правильном порядке из-за внешних ключей)
-        conn.execute(text("TRUNCATE order_compositions, orders, recipes, menu_items, ingredients, suppliers, employees, customers RESTART IDENTITY CASCADE"))
+        conn.execute(
+            text(
+                "TRUNCATE order_compositions, orders, recipes, menu_items, ingredients, suppliers, employees, customers RESTART IDENTITY CASCADE"
+            )
+        )
         conn.commit()
 
     with SessionLocal() as s:
@@ -13,29 +21,112 @@ def fill_db():
         customers_data = [
             ("Иван Иванов", "+7 (900) 123-45-67", "ivan@example.com", "Gold", 10.0),
             ("Мария Петрова", "+7 (911) 222-33-44", "maria@example.com", "Silver", 5.0),
-            ("Алексей Смирнов", "+7 (922) 555-66-77", "alex@example.com", "Bronze", 0.0),
-            ("Елена Кузнецова", "+7 (933) 888-99-00", "elena@example.com", "Gold", 10.0),
+            (
+                "Алексей Смирнов",
+                "+7 (922) 555-66-77",
+                "alex@example.com",
+                "Bronze",
+                0.0,
+            ),
+            (
+                "Елена Кузнецова",
+                "+7 (933) 888-99-00",
+                "elena@example.com",
+                "Gold",
+                10.0,
+            ),
             ("Дмитрий Волков", "+7 (944) 111-22-33", "dima@example.com", "Silver", 5.0),
             ("Анна Соколова", "+7 (955) 222-33-44", "anna@example.com", "Bronze", 0.0),
-            ("Сергей Морозов", "+7 (966) 333-44-55", "sergey@example.com", "Gold", 10.0),
-            ("Татьяна Васильева", "+7 (977) 444-55-66", "tanya@example.com", "Silver", 5.0),
-            ("Андрей Павлов", "+7 (988) 555-66-77", "andrey@example.com", "Bronze", 0.0),
-            ("Наталья Федорова", "+7 (999) 666-77-88", "natalia@example.com", "Gold", 10.0),
+            (
+                "Сергей Морозов",
+                "+7 (966) 333-44-55",
+                "sergey@example.com",
+                "Gold",
+                10.0,
+            ),
+            (
+                "Татьяна Васильева",
+                "+7 (977) 444-55-66",
+                "tanya@example.com",
+                "Silver",
+                5.0,
+            ),
+            (
+                "Андрей Павлов",
+                "+7 (988) 555-66-77",
+                "andrey@example.com",
+                "Bronze",
+                0.0,
+            ),
+            (
+                "Наталья Федорова",
+                "+7 (999) 666-77-88",
+                "natalia@example.com",
+                "Gold",
+                10.0,
+            ),
             ("Максим Козлов", "+7 (901) 777-88-99", "maxim@example.com", "Silver", 5.0),
             ("Юлия Титова", "+7 (902) 888-99-00", "yulia@example.com", "Bronze", 0.0),
             ("Роман Лебедев", "+7 (903) 999-00-11", "roman@example.com", "Gold", 10.0),
-            ("Оксана Абрамова", "+7 (904) 111-22-33", "oksana@example.com", "Silver", 5.0),
-            ("Константин Белов", "+7 (905) 222-33-44", "kostya@example.com", "Bronze", 0.0),
-            ("Евгения Полякова", "+7 (906) 333-44-55", "evgenia@example.com", "Gold", 10.0),
-            ("Артем Савельев", "+7 (907) 444-55-66", "artem@example.com", "Silver", 5.0),
-            ("Виктория Зайцева", "+7 (908) 555-66-77", "viktoria@example.com", "Bronze", 0.0),
+            (
+                "Оксана Абрамова",
+                "+7 (904) 111-22-33",
+                "oksana@example.com",
+                "Silver",
+                5.0,
+            ),
+            (
+                "Константин Белов",
+                "+7 (905) 222-33-44",
+                "kostya@example.com",
+                "Bronze",
+                0.0,
+            ),
+            (
+                "Евгения Полякова",
+                "+7 (906) 333-44-55",
+                "evgenia@example.com",
+                "Gold",
+                10.0,
+            ),
+            (
+                "Артем Савельев",
+                "+7 (907) 444-55-66",
+                "artem@example.com",
+                "Silver",
+                5.0,
+            ),
+            (
+                "Виктория Зайцева",
+                "+7 (908) 555-66-77",
+                "viktoria@example.com",
+                "Bronze",
+                0.0,
+            ),
             ("Денис Борисов", "+7 (909) 666-77-88", "denis@example.com", "Gold", 10.0),
             ("Нина Семенова", "+7 (910) 777-88-99", "nina@example.com", "Silver", 5.0),
         ]
-        from main import Customer, Employee, Supplier, Ingredient, MenuItem, Recipe, Order, OrderComposition
+        from main import (
+            Customer,
+            Employee,
+            Ingredient,
+            MenuItem,
+            Order,
+            OrderComposition,
+            Recipe,
+            Supplier,
+        )
 
         for name, phone, email, level, discount in customers_data:
-            s.add(Customer(name=name, phone=phone, email=email, loyalty_level=level, discount_percent=discount))
+            s.add(
+                Customer(
+                    name=name,
+                    phone=phone,
+                    email=email,
+                    loyalty_level=level,
+                    discount_percent=discount,
+                )
+            )
 
         # 2. Employees
         employees_data = [
@@ -65,30 +156,130 @@ def fill_db():
 
         # 3. Suppliers
         suppliers_data = [
-            ("Кофейный Мир", "+7 (800) 100-10-10", "info@coffeeworld.ru", "Москва, ул. Кофейная, 1"),
-            ("Молочный Край", "+7 (800) 200-20-20", "sales@milkland.ru", "СПб, пр. Молочников, 10"),
-            ("Овощная База", "+7 (800) 300-30-30", "fresh@vegbase.ru", "Краснодар, ул. Дальняя, 5"),
-            ("Мясной Двор", "+7 (800) 400-40-40", "meat@yard.ru", "Ростов-на-Дону, ул. Мясная, 7"),
-            ("Рыбный Остров", "+7 (800) 500-50-50", "fish@island.ru", "Астрахань, наб. Волги, 2"),
-            ("Специи и Травы", "+7 (800) 600-60-60", "spices@flavors.ru", "Казань, ул. Пряная, 12"),
-            ("Пекарня Плюс", "+7 (800) 700-70-70", "bread@plus.ru", "Екатеринбург, пер. Хлебный, 3"),
-            ("Фруктовый Сад", "+7 (800) 800-80-80", "fruit@garden.ru", "Сочи, ул. Виноградная, 45"),
-            ("Чайный Дом", "+7 (800) 900-90-90", "tea@house.ru", "Владивосток, ул. Восточная, 18"),
-            ("Сырная Лавка", "+7 (800) 111-22-33", "cheese@shop.ru", "Кострома, ул. Молочная, 9"),
-            ("Кондитер Снаб", "+7 (800) 222-33-44", "sweet@supply.ru", "Новосибирск, ул. Сахарная, 21"),
-            ("Упаковка Тут", "+7 (800) 333-44-55", "box@here.ru", "Нижний Новгород, ул. Тары, 4"),
-            ("Вода Байкала", "+7 (800) 444-55-66", "water@baikal.ru", "Иркутск, ул. Чистая, 1"),
-            ("Масло Завод", "+7 (800) 555-66-77", "oil@factory.ru", "Воронеж, пр. Солнечный, 15"),
-            ("Зелень Города", "+7 (800) 666-77-88", "green@city.ru", "Тула, ул. Огородная, 6"),
-            ("Ягодная Поляна", "+7 (800) 777-88-99", "berry@field.ru", "Пермь, ул. Лесная, 11"),
-            ("Ореховый Рай", "+7 (800) 888-99-00", "nuts@paradise.ru", "Красноярск, ул. Кедровая, 32"),
-            ("Грибная Корзина", "+7 (800) 999-00-11", "mushrooms@basket.ru", "Тюмень, ул. Боровая, 8"),
-            ("Птицефабрика Юг", "+7 (800) 123-11-22", "poultry@south.ru", "Ставрополь, ул. Куриная, 14"),
-            ("Бакалея Опт", "+7 (800) 321-22-33", "grocery@opt.ru", "Самара, ул. Складская, 50"),
+            (
+                "Кофейный Мир",
+                "+7 (800) 100-10-10",
+                "info@coffeeworld.ru",
+                "Москва, ул. Кофейная, 1",
+            ),
+            (
+                "Молочный Край",
+                "+7 (800) 200-20-20",
+                "sales@milkland.ru",
+                "СПб, пр. Молочников, 10",
+            ),
+            (
+                "Овощная База",
+                "+7 (800) 300-30-30",
+                "fresh@vegbase.ru",
+                "Краснодар, ул. Дальняя, 5",
+            ),
+            (
+                "Мясной Двор",
+                "+7 (800) 400-40-40",
+                "meat@yard.ru",
+                "Ростов-на-Дону, ул. Мясная, 7",
+            ),
+            (
+                "Рыбный Остров",
+                "+7 (800) 500-50-50",
+                "fish@island.ru",
+                "Астрахань, наб. Волги, 2",
+            ),
+            (
+                "Специи и Травы",
+                "+7 (800) 600-60-60",
+                "spices@flavors.ru",
+                "Казань, ул. Пряная, 12",
+            ),
+            (
+                "Пекарня Плюс",
+                "+7 (800) 700-70-70",
+                "bread@plus.ru",
+                "Екатеринбург, пер. Хлебный, 3",
+            ),
+            (
+                "Фруктовый Сад",
+                "+7 (800) 800-80-80",
+                "fruit@garden.ru",
+                "Сочи, ул. Виноградная, 45",
+            ),
+            (
+                "Чайный Дом",
+                "+7 (800) 900-90-90",
+                "tea@house.ru",
+                "Владивосток, ул. Восточная, 18",
+            ),
+            (
+                "Сырная Лавка",
+                "+7 (800) 111-22-33",
+                "cheese@shop.ru",
+                "Кострома, ул. Молочная, 9",
+            ),
+            (
+                "Кондитер Снаб",
+                "+7 (800) 222-33-44",
+                "sweet@supply.ru",
+                "Новосибирск, ул. Сахарная, 21",
+            ),
+            (
+                "Упаковка Тут",
+                "+7 (800) 333-44-55",
+                "box@here.ru",
+                "Нижний Новгород, ул. Тары, 4",
+            ),
+            (
+                "Вода Байкала",
+                "+7 (800) 444-55-66",
+                "water@baikal.ru",
+                "Иркутск, ул. Чистая, 1",
+            ),
+            (
+                "Масло Завод",
+                "+7 (800) 555-66-77",
+                "oil@factory.ru",
+                "Воронеж, пр. Солнечный, 15",
+            ),
+            (
+                "Зелень Города",
+                "+7 (800) 666-77-88",
+                "green@city.ru",
+                "Тула, ул. Огородная, 6",
+            ),
+            (
+                "Ягодная Поляна",
+                "+7 (800) 777-88-99",
+                "berry@field.ru",
+                "Пермь, ул. Лесная, 11",
+            ),
+            (
+                "Ореховый Рай",
+                "+7 (800) 888-99-00",
+                "nuts@paradise.ru",
+                "Красноярск, ул. Кедровая, 32",
+            ),
+            (
+                "Грибная Корзина",
+                "+7 (800) 999-00-11",
+                "mushrooms@basket.ru",
+                "Тюмень, ул. Боровая, 8",
+            ),
+            (
+                "Птицефабрика Юг",
+                "+7 (800) 123-11-22",
+                "poultry@south.ru",
+                "Ставрополь, ул. Куриная, 14",
+            ),
+            (
+                "Бакалея Опт",
+                "+7 (800) 321-22-33",
+                "grocery@opt.ru",
+                "Самара, ул. Складская, 50",
+            ),
         ]
         for name, phone, email, address in suppliers_data:
             s.add(Supplier(name=name, phone=phone, email=email, address=address))
-        
+
         s.commit()
 
         # 4. Ingredients
@@ -121,7 +312,16 @@ def fill_db():
             ("Перец болгарский", "кг", 7.0, 1.5, 250.0, "Овощная База"),
         ]
         for name, unit, stock, min_stock, price, sup_name in ingredients_data:
-            s.add(Ingredient(name=name, unit=unit, stock_quantity=stock, min_stock_level=min_stock, purchase_price=price, supplier_id=sup_dict[sup_name]))
+            s.add(
+                Ingredient(
+                    name=name,
+                    unit=unit,
+                    stock_quantity=stock,
+                    min_stock_level=min_stock,
+                    purchase_price=price,
+                    supplier_id=sup_dict[sup_name],
+                )
+            )
 
         # 5. Menu Items
         menu_items_data = [
@@ -149,8 +349,12 @@ def fill_db():
             ("Свежевыжатый Апельсиновый", "Напиток", 300.0, "300 мл"),
         ]
         for name, type, price, vol in menu_items_data:
-            s.add(MenuItem(name=name, type=type, selling_price=price, volume_or_weight=vol))
-        
+            s.add(
+                MenuItem(
+                    name=name, type=type, selling_price=price, volume_or_weight=vol
+                )
+            )
+
         s.commit()
 
         # 6. Recipes
@@ -177,7 +381,12 @@ def fill_db():
             ("Салат Греческий", "Помидоры", 0.05, "кг"),
             ("Салат Греческий", "Огурцы", 0.05, "кг"),
             ("Салат Греческий", "Перец болгарский", 0.03, "кг"),
-            ("Салат Греческий", "Сыр Пармезан", 0.02, "кг"), # Пусть будет пармезан для простоты
+            (
+                "Салат Греческий",
+                "Сыр Пармезан",
+                0.02,
+                "кг",
+            ),  # Пусть будет пармезан для простоты
             ("Сэндвич с курицей", "Куриное филе", 0.07, "кг"),
             ("Сэндвич с курицей", "Помидоры", 0.02, "кг"),
             ("Сэндвич с лососем", "Лосось", 0.05, "кг"),
@@ -189,7 +398,7 @@ def fill_db():
             ("Омлет", "Молоко 3.2%", 0.05, "л"),
             ("Блины с творогом", "Мука", 0.05, "кг"),
             ("Блины с творогом", "Яйца", 1, "шт"),
-            ("Чизкейк", "Сыр Пармезан", 0.1, "кг"), # Условно
+            ("Чизкейк", "Сыр Пармезан", 0.1, "кг"),  # Условно
             ("Тирамису", "Сливки 33%", 0.1, "л"),
             ("Тирамису", "Яйца", 1, "шт"),
             ("Лимонад Домашний", "Лимоны", 0.05, "кг"),
@@ -197,7 +406,14 @@ def fill_db():
             ("Свежевыжатый Апельсиновый", "Апельсины", 0.3, "кг"),
         ]
         for m_name, i_name, qty, unit in recipes_data:
-            s.add(Recipe(menu_item_id=menu_dict[m_name], ingredient_id=ing_dict[i_name], quantity_required=qty, unit=unit))
+            s.add(
+                Recipe(
+                    menu_item_id=menu_dict[m_name],
+                    ingredient_id=ing_dict[i_name],
+                    quantity_required=qty,
+                    unit=unit,
+                )
+            )
 
         s.commit()
 
@@ -205,8 +421,9 @@ def fill_db():
         customers = s.query(Customer).all()
         employees = s.query(Employee).all()
         menu_items = s.query(MenuItem).all()
-        
+
         import random
+
         random.seed(42)
 
         for i in range(20):
@@ -215,14 +432,15 @@ def fill_db():
             o_type = random.choice(["В заведении", "С собой"])
             p_method = random.choice(["Карта", "Наличные", "QR-код"])
             status = random.choice(["Новый", "В работе", "Готов", "Оплачен"])
-            
+
             order = Order(
                 customer_id=cust.id if cust else None,
                 employee_id=emp.id,
                 order_type=o_type,
                 payment_method=p_method,
                 status=status,
-                order_date=datetime.now() - timedelta(days=random.randint(0, 30), hours=random.randint(0, 12))
+                order_date=datetime.now()
+                - timedelta(days=random.randint(0, 30), hours=random.randint(0, 12)),
             )
             s.add(order)
             s.flush()
@@ -232,15 +450,18 @@ def fill_db():
             for _ in range(random.randint(1, 3)):
                 item = random.choice(menu_items)
                 qty = random.randint(1, 2)
-                s.add(OrderComposition(
-                    order_id=order.id,
-                    menu_item_id=item.id,
-                    quantity=qty,
-                    price_at_sale=item.selling_price
-                ))
+                s.add(
+                    OrderComposition(
+                        order_id=order.id,
+                        menu_item_id=item.id,
+                        quantity=qty,
+                        price_at_sale=item.selling_price,
+                    )
+                )
 
         s.commit()
     print("База данных успешно заполнена тематическими данными!")
+
 
 if __name__ == "__main__":
     fill_db()
