@@ -410,6 +410,25 @@ def load_menu():
     reload_tree(menu_tree, rows)
 
 
+def load_recipes():
+    s = Session()
+    items = s.query(Recipe).all()
+    rows = [(r.id, r.menu_item.name, r.ingredient.name, r.quantity_required, r.unit) for r in items]
+    s.close()
+    reload_tree(recipes_tree, rows)
+
+
+def load_order_compositions():
+    s = Session()
+    items = s.query(OrderComposition).all()
+    rows = [
+        (c.id, c.order_id, c.menu_item.name, c.quantity, c.price_at_sale, c.total_price())
+        for c in items
+    ]
+    s.close()
+    reload_tree(compositions_tree, rows)
+
+
 # ===================== CREATE FORMS =====================
 
 
@@ -1399,5 +1418,35 @@ tk.Button(
     command=lambda: delete_selected(orders_tree, Order, load_orders),
 ).pack(side="left")
 load_orders()
+
+# Recipes
+fr = ttk.Frame(nb)
+nb.add(fr, text="Recipes")
+recipes_tree = create_table(
+    fr,
+    ("id", "menu_item", "ingredient", "qty", "unit"),
+    ("ID", "Блюдо", "Ингредиент", "Кол-во", "Ед. изм."),
+)
+tk.Button(
+    fr,
+    text="Удалить",
+    command=lambda: delete_selected(recipes_tree, Recipe, load_recipes),
+).pack(side="left")
+load_recipes()
+
+# Order Compositions
+foc = ttk.Frame(nb)
+nb.add(foc, text="Order Details")
+compositions_tree = create_table(
+    foc,
+    ("id", "order_id", "menu_item", "qty", "price", "total"),
+    ("ID", "ID Заказа", "Позиция", "Кол-во", "Цена", "Итого"),
+)
+tk.Button(
+    foc,
+    text="Удалить",
+    command=lambda: delete_selected(compositions_tree, OrderComposition, load_order_compositions),
+).pack(side="left")
+load_order_compositions()
 
 root.mainloop()
