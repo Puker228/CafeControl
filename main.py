@@ -334,6 +334,15 @@ def delete_selected(tree, model, reload_func):
     reload_func()
 
 
+def get_selected_id(tree):
+    selected = tree.selection()
+    if not selected:
+        messagebox.showwarning("Внимание", "Выберите запись")
+        return None
+    item = tree.item(selected[0])
+    return int(item["values"][0])
+
+
 # ===================== LOADERS =====================
 
 
@@ -757,6 +766,376 @@ def create_customer():
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
+def edit_customer(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    obj = s.get(Customer, record_id)
+    if not obj:
+        s.close()
+        return
+    win = tk.Toplevel(root)
+    win.title("Редактировать клиента")
+    tk.Label(win, text="Имя").grid(row=0, column=0)
+    tk.Label(win, text="Телефон").grid(row=1, column=0)
+    tk.Label(win, text="Email").grid(row=2, column=0)
+    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
+    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=1, column=1)
+    e_email = tk.Entry(win); e_email.insert(0, obj.email); e_email.grid(row=2, column=1)
+    def save():
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+        s2 = Session()
+        o = s2.get(Customer, record_id)
+        o.name = e_name.get()
+        o.phone = phone
+        o.email = e_email.get()
+        s2.commit(); s2.close()
+        load_customers()
+        win.destroy()
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+    s.close()
+
+
+def edit_employee(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    obj = s.get(Employee, record_id)
+    if not obj:
+        s.close()
+        return
+    win = tk.Toplevel(root)
+    win.title("Редактировать сотрудника")
+    tk.Label(win, text="ФИО").grid(row=0, column=0)
+    tk.Label(win, text="Роль").grid(row=1, column=0)
+    tk.Label(win, text="Телефон").grid(row=2, column=0)
+    tk.Label(win, text="Зарплата").grid(row=3, column=0)
+    e_fio = tk.Entry(win); e_fio.insert(0, obj.fio); e_fio.grid(row=0, column=1)
+    e_role = tk.Entry(win); e_role.insert(0, obj.role); e_role.grid(row=1, column=1)
+    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=2, column=1)
+    e_salary = tk.Entry(win); e_salary.insert(0, str(obj.salary)); e_salary.grid(row=3, column=1)
+    def save():
+        try:
+            salary = float(e_salary.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных. Поле 'Зарплата' должно быть числовым.")
+            return
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+        s2 = Session()
+        o = s2.get(Employee, record_id)
+        o.fio = e_fio.get()
+        o.role = e_role.get()
+        o.phone = phone
+        o.salary = salary
+        s2.commit(); s2.close()
+        load_employees()
+        win.destroy()
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+    s.close()
+
+
+def edit_supplier(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    obj = s.get(Supplier, record_id)
+    if not obj:
+        s.close()
+        return
+    win = tk.Toplevel(root)
+    win.title("Редактировать поставщика")
+    tk.Label(win, text="Название").grid(row=0, column=0)
+    tk.Label(win, text="Телефон").grid(row=1, column=0)
+    tk.Label(win, text="Email").grid(row=2, column=0)
+    tk.Label(win, text="Адрес").grid(row=3, column=0)
+    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
+    e_phone = tk.Entry(win); e_phone.insert(0, obj.phone); e_phone.grid(row=1, column=1)
+    e_email = tk.Entry(win); e_email.insert(0, obj.email); e_email.grid(row=2, column=1)
+    e_address = tk.Entry(win); e_address.insert(0, obj.address); e_address.grid(row=3, column=1)
+    def save():
+        if not e_name.get():
+            messagebox.showerror("Ошибка", "Заполните название")
+            return
+        phone = e_phone.get()
+        if phone and not validate_russian_phone(phone):
+            messagebox.showerror("Ошибка", "Некорректный российский номер телефона")
+            return
+        s2 = Session()
+        o = s2.get(Supplier, record_id)
+        o.name = e_name.get()
+        o.phone = phone
+        o.email = e_email.get()
+        o.address = e_address.get()
+        s2.commit(); s2.close()
+        load_suppliers()
+        win.destroy()
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+    s.close()
+
+
+def edit_ingredient(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    obj = s.get(Ingredient, record_id)
+    if not obj:
+        s.close()
+        return
+    win = tk.Toplevel(root)
+    win.title("Редактировать ингредиент")
+    tk.Label(win, text="Название").grid(row=0, column=0)
+    tk.Label(win, text="Ед. изм.").grid(row=1, column=0)
+    tk.Label(win, text="Кол-во").grid(row=2, column=0)
+    tk.Label(win, text="Мин. уровень").grid(row=3, column=0)
+    tk.Label(win, text="Цена закупки").grid(row=4, column=0)
+    tk.Label(win, text="Поставщик").grid(row=5, column=0)
+    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
+    e_unit = tk.Entry(win); e_unit.insert(0, obj.unit); e_unit.grid(row=1, column=1)
+    e_qty = tk.Entry(win); e_qty.insert(0, str(obj.stock_quantity)); e_qty.grid(row=2, column=1)
+    e_min = tk.Entry(win); e_min.insert(0, str(obj.min_stock_level)); e_min.grid(row=3, column=1)
+    e_price = tk.Entry(win); e_price.insert(0, str(obj.purchase_price)); e_price.grid(row=4, column=1)
+    sup_var = tk.StringVar()
+    sup_box = ttk.Combobox(win, textvariable=sup_var, state="readonly")
+    sup_box.grid(row=5, column=1)
+    suppliers = s.query(Supplier).all()
+    sup_map = {sup.name: sup.id for sup in suppliers}
+    sup_box["values"] = list(sup_map.keys())
+    for name, sid in sup_map.items():
+        if sid == obj.supplier_id:
+            sup_box.set(name)
+            break
+    def save():
+        if not e_name.get() or not sup_var.get():
+            messagebox.showerror("Ошибка", "Заполните поля")
+            return
+        try:
+            qty = float(e_qty.get() or 0)
+            min_lvl = float(e_min.get() or 0)
+            price = float(e_price.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных.")
+            return
+        s2 = Session()
+        o = s2.get(Ingredient, record_id)
+        o.name = e_name.get()
+        o.unit = e_unit.get()
+        o.stock_quantity = qty
+        o.min_stock_level = min_lvl
+        o.purchase_price = price
+        o.supplier_id = sup_map[sup_var.get()]
+        s2.commit(); s2.close()
+        load_ingredients()
+        win.destroy()
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+    s.close()
+
+
+def edit_menu_item(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    obj = s.get(MenuItem, record_id)
+    if not obj:
+        s.close()
+        return
+    win = tk.Toplevel(root)
+    win.title("Редактировать блюдо")
+    tk.Label(win, text="Название").grid(row=0, column=0)
+    tk.Label(win, text="Тип").grid(row=1, column=0)
+    tk.Label(win, text="Цена продажи").grid(row=2, column=0)
+    tk.Label(win, text="Объем/Вес").grid(row=3, column=0)
+    e_name = tk.Entry(win); e_name.insert(0, obj.name); e_name.grid(row=0, column=1)
+    e_type = tk.Entry(win); e_type.insert(0, obj.type); e_type.grid(row=1, column=1)
+    e_price = tk.Entry(win); e_price.insert(0, str(obj.selling_price)); e_price.grid(row=2, column=1)
+    e_vol = tk.Entry(win); e_vol.insert(0, obj.volume_or_weight); e_vol.grid(row=3, column=1)
+    def save():
+        try:
+            price = float(e_price.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректный тип данных.")
+            return
+        s2 = Session()
+        o = s2.get(MenuItem, record_id)
+        o.name = e_name.get()
+        o.type = e_type.get()
+        o.selling_price = price
+        o.volume_or_weight = e_vol.get()
+        s2.commit(); s2.close()
+        load_menu()
+        win.destroy()
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+    s.close()
+
+
+def edit_order(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+    s = Session()
+    order = s.query(Order).filter(Order.id == record_id).first()
+    if not order:
+        s.close()
+        return
+
+    win = tk.Toplevel(root)
+    win.title(f"Редактировать заказ №{record_id}")
+    win.geometry("500x700")
+
+    tk.Label(win, text="Сотрудник").pack()
+    employee_var = tk.StringVar()
+    employee_box = ttk.Combobox(win, textvariable=employee_var, state="readonly")
+    employee_box.pack(fill="x")
+
+    tk.Label(win, text="Клиент").pack()
+    customer_var = tk.StringVar()
+    customer_box = ttk.Combobox(win, textvariable=customer_var, state="readonly")
+    customer_box.pack(fill="x")
+
+    tk.Label(win, text="Тип заказа").pack()
+    type_entry = tk.Entry(win)
+    type_entry.insert(0, order.order_type)
+    type_entry.pack(fill="x")
+
+    tk.Label(win, text="Метод оплаты").pack()
+    payment_entry = tk.Entry(win)
+    payment_entry.insert(0, order.payment_method)
+    payment_entry.pack(fill="x")
+
+    tk.Label(win, text="Статус").pack()
+    status_entry = tk.Entry(win)
+    status_entry.insert(0, order.status)
+    status_entry.pack(fill="x")
+
+    tk.Label(win, text="Добавить позиции").pack()
+    menu_list = tk.Listbox(win, height=8)
+    menu_list.pack(fill="both", expand=True)
+
+    tk.Label(win, text="Количество").pack()
+    qty = tk.Entry(win)
+    qty.insert(0, "1")
+    qty.pack()
+
+    cart = []
+    for comp in order.compositions:
+        cart.append({
+            "id": comp.menu_item_id,
+            "name": comp.menu_item.name,
+            "quantity": comp.quantity,
+            "price": comp.price_at_sale
+        })
+
+    cart_box = tk.Listbox(win, height=6)
+    cart_box.pack(fill="both", expand=True)
+
+    def refresh_cart_box():
+        cart_box.delete(0, "end")
+        for i in cart:
+            cart_box.insert("end", f"{i['name']} ({i['price']}) x{i['quantity']}")
+
+    refresh_cart_box()
+
+    employees = s.query(Employee).all()
+    employee_map = {e.fio: e.id for e in employees}
+    employee_box["values"] = list(employee_map.keys())
+    for name, eid in employee_map.items():
+        if eid == order.employee_id:
+            employee_box.set(name)
+            break
+
+    customers = s.query(Customer).all()
+    customer_map = {c.name: c.id for c in customers}
+    customer_box["values"] = ["<Нет клиента>"] + list(customer_map.keys())
+    if order.customer:
+        customer_box.set(order.customer.name)
+    else:
+        customer_box.set("<Нет клиента>")
+
+    items = s.query(MenuItem).all()
+    item_map = {f"{i.name} ({i.selling_price})": (i.id, i.selling_price, i.name) for i in items}
+    menu_list.insert("end", *item_map.keys())
+
+    def add_to_cart():
+        sel = menu_list.curselection()
+        if not sel: return
+        key = menu_list.get(sel)
+        item_id, price, name = item_map[key]
+        try:
+            quantity = int(qty.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Количество должно быть числом")
+            return
+        
+        # Если такой товар уже есть, прибавляем
+        for i in cart:
+            if i["id"] == item_id:
+                i["quantity"] += quantity
+                refresh_cart_box()
+                return
+        
+        cart.append({"id": item_id, "name": name, "quantity": quantity, "price": price})
+        refresh_cart_box()
+
+    def remove_from_cart():
+        sel = cart_box.curselection()
+        if not sel: return
+        cart.pop(sel[0])
+        refresh_cart_box()
+
+    def save():
+        if not employee_var.get():
+            messagebox.showerror("Ошибка", "Выберите сотрудника")
+            return
+        if not cart:
+            messagebox.showerror("Ошибка", "Корзина пуста")
+            return
+
+        s2 = Session()
+        try:
+            o = s2.query(Order).filter(Order.id == record_id).first()
+            o.employee_id = employee_map[employee_var.get()]
+            c_id = None
+            if customer_var.get() != "<Нет клиента>":
+                c_id = customer_map[customer_var.get()]
+            o.customer_id = c_id
+            o.order_type = type_entry.get()
+            o.payment_method = payment_entry.get()
+            o.status = status_entry.get()
+
+            # Обновляем состав: проще всего удалить старые и добавить новые
+            s2.query(OrderComposition).filter(OrderComposition.order_id == record_id).delete()
+            for i in cart:
+                s2.add(OrderComposition(
+                    order_id=record_id,
+                    menu_item_id=i["id"],
+                    quantity=i["quantity"],
+                    price_at_sale=i["price"]
+                ))
+            
+            s2.commit()
+            load_orders()
+            win.destroy()
+        except Exception as e:
+            s2.rollback()
+            messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}")
+        finally:
+            s2.close()
+
+    tk.Button(win, text="➕ Добавить", command=add_to_cart).pack(side="top")
+    tk.Button(win, text="❌ Удалить позицию", command=remove_from_cart).pack(side="top")
+    tk.Button(win, text="💾 Сохранить изменения", command=save, bg="green", fg="white").pack(pady=10)
+    
+    s.close()
 
 
 def export_report():
@@ -926,12 +1305,13 @@ tk.Button(
 fc = ttk.Frame(nb)
 nb.add(fc, text="Customers")
 customers_tree = create_table(fc, ("id", "name", "phone", "email", "loyalty"), ("ID", "Имя", "Телефон", "Email", "Уровень"))
-tk.Button(fc, text="Добавить", command=create_customer).pack()
+tk.Button(fc, text="Добавить", command=create_customer).pack(side="left")
+tk.Button(fc, text="Редактировать", command=lambda: edit_customer(customers_tree)).pack(side="left")
 tk.Button(
     fc,
     text="Удалить",
     command=lambda: delete_selected(customers_tree, Customer, load_customers),
-).pack()
+).pack(side="left")
 load_customers()
 
 # Employees
@@ -942,12 +1322,13 @@ employees_tree = create_table(
     ("id", "fio", "role", "phone", "salary"),
     ("ID", "ФИО", "Роль", "Телефон", "Зарплата"),
 )
-tk.Button(fe, text="Добавить", command=create_employee).pack()
+tk.Button(fe, text="Добавить", command=create_employee).pack(side="left")
+tk.Button(fe, text="Редактировать", command=lambda: edit_employee(employees_tree)).pack(side="left")
 tk.Button(
     fe,
     text="Удалить",
     command=lambda: delete_selected(employees_tree, Employee, load_employees),
-).pack()
+).pack(side="left")
 load_employees()
 
 # Suppliers
@@ -958,12 +1339,13 @@ suppliers_tree = create_table(
     ("id", "name", "phone", "email", "address"),
     ("ID", "Название", "Телефон", "Email", "Адрес"),
 )
-tk.Button(fsup, text="Добавить", command=create_supplier).pack()
+tk.Button(fsup, text="Добавить", command=create_supplier).pack(side="left")
+tk.Button(fsup, text="Редактировать", command=lambda: edit_supplier(suppliers_tree)).pack(side="left")
 tk.Button(
     fsup,
     text="Удалить",
     command=lambda: delete_selected(suppliers_tree, Supplier, load_suppliers),
-).pack()
+).pack(side="left")
 load_suppliers()
 
 # Ingredients
@@ -974,12 +1356,13 @@ ingredients_tree = create_table(
     ("id", "name", "unit", "stock", "price"),
     ("ID", "Название", "Ед. изм.", "Остаток", "Цена зак."),
 )
-tk.Button(fing, text="Добавить", command=create_ingredient).pack()
+tk.Button(fing, text="Добавить", command=create_ingredient).pack(side="left")
+tk.Button(fing, text="Редактировать", command=lambda: edit_ingredient(ingredients_tree)).pack(side="left")
 tk.Button(
     fing,
     text="Удалить",
     command=lambda: delete_selected(ingredients_tree, Ingredient, load_ingredients),
-).pack()
+).pack(side="left")
 load_ingredients()
 
 # Menu
@@ -990,12 +1373,13 @@ menu_tree = create_table(
     ("id", "name", "type", "price", "vol"),
     ("ID", "Название", "Тип", "Цена прод.", "Объем/Вес"),
 )
-tk.Button(fm, text="Добавить", command=create_menu_item).pack()
+tk.Button(fm, text="Добавить", command=create_menu_item).pack(side="left")
+tk.Button(fm, text="Редактировать", command=lambda: edit_menu_item(menu_tree)).pack(side="left")
 tk.Button(
     fm,
     text="Удалить",
     command=lambda: delete_selected(menu_tree, MenuItem, load_menu),
-).pack()
+).pack(side="left")
 load_menu()
 
 # Orders
@@ -1007,12 +1391,13 @@ orders_tree = create_table(
     ("id", "customer", "employee", "date", "items", "total", "status"),
     ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Статус"),
 )
-tk.Button(fo, text="Создать заказ", command=create_order, font=("Arial", 10, "bold")).pack()
+tk.Button(fo, text="Добавить", command=create_order, font=("Arial", 10, "bold")).pack(side="left")
+tk.Button(fo, text="Редактировать", command=lambda: edit_order(orders_tree)).pack(side="left")
 tk.Button(
     fo,
     text="Удалить",
     command=lambda: delete_selected(orders_tree, Order, load_orders),
-).pack()
+).pack(side="left")
 load_orders()
 
 root.mainloop()
