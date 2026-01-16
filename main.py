@@ -1294,11 +1294,11 @@ def export_report():
             c.font = Font(bold=True)
 
     # =====================================================
-    # 1. ПРОДАЖИ ПО ДНЯМ
+    # 1. ПРОДАЖИ ПО ДНЯМ (с учетом себестоимости)
     # =====================================================
     ws = wb.active
     ws.title = "Продажи по дням"
-    ws.append(["Дата", "Заказов", "Позиций", "Выручка"])
+    ws.append(["Дата", "Заказов", "Позиций", "Выручка", "Себестоимость", "Прибыль"])
 
     rows = s.execute(
         text("""
@@ -1306,7 +1306,19 @@ def export_report():
             DATE(o.order_date) AS day,
             COUNT(DISTINCT o.id) AS orders,
             SUM(oc.quantity) AS items,
-            SUM(oc.quantity * oc.price_at_sale) AS revenue
+            SUM(oc.quantity * oc.price_at_sale) AS revenue,
+            SUM(oc.quantity * (
+                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
+                FROM recipes r
+                JOIN ingredients i ON r.ingredient_id = i.id
+                WHERE r.menu_item_id = oc.menu_item_id
+            )) AS cost,
+            SUM(oc.quantity * oc.price_at_sale) - SUM(oc.quantity * (
+                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
+                FROM recipes r
+                JOIN ingredients i ON r.ingredient_id = i.id
+                WHERE r.menu_item_id = oc.menu_item_id
+            )) AS profit
         FROM orders o
         JOIN order_compositions oc ON oc.order_id = o.id
         GROUP BY day
@@ -1320,10 +1332,12 @@ def export_report():
     bold(ws)
 
     # =====================================================
-    # 2. ТОП БЛЮД
+    # 2. ТОП БЛЮД (с маржинальностью)
     # =====================================================
     ws = wb.create_sheet("Топ блюд")
-    ws.append(["Блюдо", "Тип", "Продано", "Выручка"])
+    ws.append(
+        ["Блюдо", "Тип", "Продано", "Выручка", "Себестоимость ед.", "Прибыль общая"]
+    )
 
     rows = s.execute(
         text("""
@@ -1331,11 +1345,23 @@ def export_report():
             mi.name,
             mi.type,
             SUM(oc.quantity),
-            SUM(oc.quantity * oc.price_at_sale)
+            SUM(oc.quantity * oc.price_at_sale),
+            (
+                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
+                FROM recipes r
+                JOIN ingredients i ON r.ingredient_id = i.id
+                WHERE r.menu_item_id = mi.id
+            ) AS unit_cost,
+            SUM(oc.quantity * oc.price_at_sale) - SUM(oc.quantity * (
+                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
+                FROM recipes r
+                JOIN ingredients i ON r.ingredient_id = i.id
+                WHERE r.menu_item_id = mi.id
+            )) AS total_profit
         FROM order_compositions oc
         JOIN menu_items mi ON mi.id = oc.menu_item_id
-        GROUP BY mi.name, mi.type
-        ORDER BY 4 DESC
+        GROUP BY mi.id, mi.name, mi.type
+        ORDER BY total_profit DESC
     """)
     ).all()
 
@@ -1397,19 +1423,45 @@ def export_report():
     bold(ws)
 
     # =====================================================
-    # 5. ПРИБЫЛЬ
+    # 5. ПРИБЫЛЬ И УБЫТКИ
     # =====================================================
     ws = wb.create_sheet("Прибыль")
-    ws.append(["Выручка", "Прибыль"])
+    ws.append(["Показатель", "Значение"])
 
+    # 5.1 Выручка (уже посчитана выше, но возьмем для чистоты)
     revenue = s.execute(
         text("""
         SELECT COALESCE(SUM(total_amount), 0) FROM orders
     """)
     ).scalar()
 
-    ws.append([revenue, revenue])
+    # 5.2 Себестоимость (COGS) - на основе рецептов и закупочных цен
+    cogs = s.execute(
+        text("""
+        SELECT COALESCE(SUM(oc.quantity * r.quantity_required * i.purchase_price), 0)
+        FROM order_compositions oc
+        JOIN recipes r ON oc.menu_item_id = r.menu_item_id
+        JOIN ingredients i ON r.ingredient_id = i.id
+    """)
+    ).scalar()
+
+    # 5.3 Расходы на персонал (сумма всех зарплат)
+    salaries = s.execute(
+        text("SELECT COALESCE(SUM(salary), 0) FROM employees")
+    ).scalar()
+
+    profit = float(revenue) - float(cogs) - float(salaries)
+
+    ws.append(["Общая выручка", revenue])
+    ws.append(["Себестоимость товаров (продукты)", cogs])
+    ws.append(["Расходы на персонал (зарплаты)", salaries])
+    ws.append(["Чистая прибыль", profit])
+
+    # Добавим форматирование
     bold(ws)
+    for row in ws.iter_rows(min_row=2, max_row=5, min_col=2, max_col=2):
+        for cell in row:
+            cell.number_format = "#,##0.00"
 
     # =====================================================
     # 6. НАГРУЗКА ПО ЧАСАМ
