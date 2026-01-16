@@ -1294,11 +1294,11 @@ def export_report():
             c.font = Font(bold=True)
 
     # =====================================================
-    # 1. ПРОДАЖИ ПО ДНЯМ (с учетом себестоимости)
+    # 1. ПРОДАЖИ ПО ДНЯМ
     # =====================================================
     ws = wb.active
     ws.title = "Продажи по дням"
-    ws.append(["Дата", "Заказов", "Позиций", "Выручка", "Себестоимость", "Прибыль"])
+    ws.append(["Дата", "Заказов", "Позиций", "Выручка"])
 
     rows = s.execute(
         text("""
@@ -1306,19 +1306,7 @@ def export_report():
             DATE(o.order_date) AS day,
             COUNT(DISTINCT o.id) AS orders,
             SUM(oc.quantity) AS items,
-            SUM(oc.quantity * oc.price_at_sale) AS revenue,
-            SUM(oc.quantity * (
-                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
-                FROM recipes r
-                JOIN ingredients i ON r.ingredient_id = i.id
-                WHERE r.menu_item_id = oc.menu_item_id
-            )) AS cost,
-            SUM(oc.quantity * oc.price_at_sale) - SUM(oc.quantity * (
-                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
-                FROM recipes r
-                JOIN ingredients i ON r.ingredient_id = i.id
-                WHERE r.menu_item_id = oc.menu_item_id
-            )) AS profit
+            SUM(oc.quantity * oc.price_at_sale) AS revenue
         FROM orders o
         JOIN order_compositions oc ON oc.order_id = o.id
         GROUP BY day
@@ -1332,36 +1320,22 @@ def export_report():
     bold(ws)
 
     # =====================================================
-    # 2. ТОП БЛЮД (с маржинальностью)
+    # 2. ТОП БЛЮД
     # =====================================================
     ws = wb.create_sheet("Топ блюд")
-    ws.append(
-        ["Блюдо", "Тип", "Продано", "Выручка", "Себестоимость ед.", "Прибыль общая"]
-    )
+    ws.append(["Блюдо", "Тип", "Продано", "Выручка"])
 
     rows = s.execute(
         text("""
         SELECT
             mi.name,
             mi.type,
-            SUM(oc.quantity),
-            SUM(oc.quantity * oc.price_at_sale),
-            (
-                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
-                FROM recipes r
-                JOIN ingredients i ON r.ingredient_id = i.id
-                WHERE r.menu_item_id = mi.id
-            ) AS unit_cost,
-            SUM(oc.quantity * oc.price_at_sale) - SUM(oc.quantity * (
-                SELECT COALESCE(SUM(r.quantity_required * i.purchase_price), 0)
-                FROM recipes r
-                JOIN ingredients i ON r.ingredient_id = i.id
-                WHERE r.menu_item_id = mi.id
-            )) AS total_profit
+            SUM(oc.quantity) AS total_qty,
+            SUM(oc.quantity * oc.price_at_sale) AS total_revenue
         FROM order_compositions oc
         JOIN menu_items mi ON mi.id = oc.menu_item_id
         GROUP BY mi.id, mi.name, mi.type
-        ORDER BY total_profit DESC
+        ORDER BY total_revenue DESC
     """)
     ).all()
 
