@@ -874,6 +874,18 @@ def edit_customer(tree):
     tk.Label(win, text="Имя").grid(row=0, column=0)
     tk.Label(win, text="Телефон").grid(row=1, column=0)
     tk.Label(win, text="Email").grid(row=2, column=0)
+
+    tk.Label(win, text="Уровень").grid(row=3, column=0)
+    tk.Label(win, text="Скидка (%)").grid(row=4, column=0)
+
+    e_level = tk.Entry(win)
+    e_level.insert(0, obj.loyalty_level)
+    e_level.grid(row=3, column=1)
+
+    e_discount = tk.Entry(win)
+    e_discount.insert(0, str(obj.discount_percent))
+    e_discount.grid(row=4, column=1)
+
     e_name = tk.Entry(win)
     e_name.insert(0, obj.name)
     e_name.grid(row=0, column=1)
@@ -894,6 +906,16 @@ def edit_customer(tree):
         o.name = e_name.get()
         o.phone = phone
         o.email = e_email.get()
+
+        try:
+            discount = float(e_discount.get() or 0)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Скидка должна быть числом")
+            return
+
+        o.loyalty_level = e_level.get()
+        o.discount_percent = discount
+
         s2.commit()
         s2.close()
         load_customers()
