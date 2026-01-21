@@ -416,10 +416,11 @@ def load_orders():
             (
                 o.id,
                 o.customer.name if o.customer else "<В зале>",
-                o.employee.fio if o.employee else "",
+                o.employee.fio,
                 o.order_date.strftime("%Y-%m-%d %H:%M"),
                 len(o.compositions),
                 o.total(),
+                o.payment_method,
                 o.status,
             )
         )
@@ -1633,8 +1634,8 @@ nb.add(fo, text="Orders")
 
 orders_tree = create_table(
     fo,
-    ("id", "customer", "employee", "date", "items", "total", "status"),
-    ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Статус"),
+    ("id", "customer", "employee", "date", "items", "total", "payment", "status"),
+    ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Оплата", "Статус"),
 )
 tk.Button(fo, text="Добавить", command=create_order, font=("Arial", 10, "bold")).pack(
     side="left"
