@@ -398,7 +398,9 @@ def load_ingredients():
         Ingredient.unit,
         Ingredient.stock_quantity,
         Ingredient.purchase_price,
-    ).all()
+        Supplier.name
+    ).join(Supplier).all()
+
     s.close()
     reload_tree(ingredients_tree, rows)
 
@@ -1592,8 +1594,8 @@ fing = ttk.Frame(nb)
 nb.add(fing, text="Ingredients")
 ingredients_tree = create_table(
     fing,
-    ("id", "name", "unit", "stock", "price"),
-    ("ID", "Название", "Ед. изм.", "Остаток", "Цена зак."),
+    ("id", "name", "unit", "stock", "price", "supplier"),
+    ("ID", "Название", "Ед. изм.", "Остаток", "Цена зак.", "Поставщик"),
 )
 tk.Button(fing, text="Добавить", command=create_ingredient).pack(side="left")
 tk.Button(
