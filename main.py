@@ -11,8 +11,8 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     create_engine,
-    text,
     event,
+    text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -144,32 +144,25 @@ class OrderComposition(Base):
         return round(float(self.price_at_sale) * self.quantity, 2)
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    table_name: Mapped[str] = mapped_column()
-    operation: Mapped[str] = mapped_column()
-    details: Mapped[str] = mapped_column()
-    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
-
-
 engine = create_engine(
     "postgresql+psycopg2://postgres:postgres@localhost:5434/postgres", echo=False
 )
 
+
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_connection, connection_record):
     """Включаем вывод NOTICE сообщений из PostgreSQL в консоль Python."""
+
     def notice_handler(notice):
         # notice может быть объектом или строкой в зависимости от версии psycopg2
-        if hasattr(notice, 'message'):
+        if hasattr(notice, "message"):
             print(f"DB NOTICE: {notice.message.strip()}")
         else:
             print(f"DB NOTICE: {str(notice).strip()}")
-    
-    if hasattr(dbapi_connection, 'set_notice_receiver'):
+
+    if hasattr(dbapi_connection, "set_notice_receiver"):
         dbapi_connection.set_notice_receiver(notice_handler)
+
 
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
@@ -215,68 +208,60 @@ AFTER INSERT OR UPDATE OR DELETE ON order_compositions
 FOR EACH ROW EXECUTE FUNCTION update_order_total();
 """
 
-# 2. DML Trigger: Логирование изменения цен (в таблицу audit_logs)
+# 2. DML Trigger: Простое уведомление об изменении клиента
 trigger_dml_2_func = """
-CREATE OR REPLACE FUNCTION log_price_change()
+CREATE OR REPLACE FUNCTION notify_customer_update()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF OLD.selling_price IS DISTINCT FROM NEW.selling_price THEN
-        INSERT INTO audit_logs (table_name, operation, details, created_at)
-        VALUES ('menu_items', 'UPDATE_PRICE', 
-                'Item ID ' || OLD.id || ': ' || OLD.selling_price || ' -> ' || NEW.selling_price,
-                NOW());
-    END IF;
+    RAISE NOTICE 'Данные клиента обновлены: ID %', NEW.name;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 """
 
 trigger_dml_2 = """
-DROP TRIGGER IF EXISTS trg_log_price_change ON menu_items;
-CREATE TRIGGER trg_log_price_change
-AFTER UPDATE OF selling_price ON menu_items
-FOR EACH ROW EXECUTE FUNCTION log_price_change();
+DROP TRIGGER IF EXISTS trg_notify_customer_update ON customers;
+CREATE TRIGGER trg_notify_customer_update
+AFTER UPDATE ON customers
+FOR EACH ROW EXECUTE FUNCTION notify_customer_update();
 """
 
-# 3. DML Trigger: Логирование удаления заказов
+# 3. DML Trigger: Логирование удаления блюда из меню
 trigger_dml_3_func = """
-CREATE OR REPLACE FUNCTION log_order_deletion()
+CREATE OR REPLACE FUNCTION notify_menu_item_deletion()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO audit_logs (table_name, operation, details, created_at)
-    VALUES ('orders', 'DELETE', 'Order ID ' || OLD.id || ' for customer ID ' || OLD.customer_id || ' was deleted', NOW());
+    RAISE NOTICE 'Блюдо удалено из меню: ID %, Название: %', OLD.id, OLD.name;
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 """
 
 trigger_dml_3 = """
-DROP TRIGGER IF EXISTS trg_log_order_deletion ON orders;
-CREATE TRIGGER trg_log_order_deletion
-AFTER DELETE ON orders
-FOR EACH ROW EXECUTE FUNCTION log_order_deletion();
+DROP TRIGGER IF EXISTS trg_notify_menu_item_deletion ON menu_items;
+CREATE TRIGGER trg_notify_menu_item_deletion
+AFTER DELETE ON menu_items
+FOR EACH ROW EXECUTE FUNCTION notify_menu_item_deletion();
 """
 
-# 4. DML Trigger: Логирование новых ингредиентов
-trigger_dml_4_func = """
-CREATE OR REPLACE FUNCTION log_new_ingredient()
-RETURNS TRIGGER AS $$
+# 4. DDL Trigger: Простое уведомление о DDL
+trigger_ddl_func = """
+CREATE OR REPLACE FUNCTION notify_ddl_action()
+RETURNS event_trigger AS $$
 BEGIN
-    INSERT INTO audit_logs (table_name, operation, details, created_at)
-    VALUES ('ingredients', 'INSERT', 'New ingredient: ' || NEW.name || ' (Unit: ' || NEW.unit || ')', NOW());
-    RETURN NEW;
+    RAISE NOTICE 'Выполнена DDL операция: %', TG_TAG;
 END;
 $$ LANGUAGE plpgsql;
 """
 
-trigger_dml_4 = """
-DROP TRIGGER IF EXISTS trg_log_new_ingredient ON ingredients;
-CREATE TRIGGER trg_log_new_ingredient
-AFTER INSERT ON ingredients
-FOR EACH ROW EXECUTE FUNCTION log_new_ingredient();
+# Event trigger нельзя создать внутри транзакции в некоторых случаях,
+# и он требует прав суперпользователя.
+# Также он срабатывает на всю базу.
+trigger_ddl = """
+DROP EVENT TRIGGER IF EXISTS trg_notify_ddl;
+CREATE EVENT TRIGGER trg_notify_ddl ON ddl_command_end
+EXECUTE FUNCTION notify_ddl_action();
 """
-
-# Event trigger удален по просьбе пользователя
 
 with engine.connect() as conn:
     print("Creating triggers...")
@@ -287,18 +272,19 @@ with engine.connect() as conn:
     conn.execute(text(trigger_dml_2))
     conn.execute(text(trigger_dml_3_func))
     conn.execute(text(trigger_dml_3))
-    conn.execute(text(trigger_dml_4_func))
-    conn.execute(text(trigger_dml_4))
+    conn.execute(text(trigger_ddl_func))
+    # Event triggers в PG не могут быть созданы в блоке с другими командами иногда,
+    # или требуют отдельного коммита.
     conn.commit()
     print("Triggers created.")
 
-# Event trigger удален по просьбе пользователя
+# Event trigger часто требует отдельного выполнения, так как он глобальный.
 try:
     with engine.connect() as conn:
-        conn.execute(text("DROP EVENT TRIGGER IF EXISTS trg_audit_ddl;"))
+        conn.execute(text(trigger_ddl))
         conn.commit()
 except Exception as e:
-    print(f"Could not drop event trigger: {e}")
+    print(f"Could not create event trigger (might need superuser): {e}")
 
 
 # ===================== HELPERS =====================
@@ -489,17 +475,6 @@ def load_order_compositions():
     ]
     s.close()
     reload_tree(compositions_tree, rows)
-
-
-def load_audit_logs():
-    s = Session()
-    items = s.query(AuditLog).order_by(AuditLog.created_at.desc()).all()
-    rows = [
-        (l.id, l.table_name, l.operation, l.details, l.created_at.strftime("%Y-%m-%d %H:%M:%S"))
-        for l in items
-    ]
-    s.close()
-    reload_tree(audit_tree, rows)
 
 
 # ===================== CREATE FORMS =====================
@@ -1681,16 +1656,5 @@ tk.Button(
     ),
 ).pack(side="left")
 load_order_compositions()
-
-# Audit Logs
-fal = ttk.Frame(nb)
-nb.add(fal, text="Audit Logs")
-audit_tree = create_table(
-    fal,
-    ("id", "table", "op", "details", "time"),
-    ("ID", "Таблица", "Операция", "Детали", "Время"),
-)
-tk.Button(fal, text="Обновить", command=load_audit_logs).pack(side="left")
-load_audit_logs()
 
 root.mainloop()
