@@ -170,10 +170,7 @@ engine = create_engine(
 
 @event.listens_for(engine, "connect")
 def receive_connect(dbapi_connection, connection_record):
-    """Включаем вывод NOTICE сообщений из PostgreSQL в консоль Python."""
-
     def notice_handler(notice):
-        # notice может быть объектом или строкой в зависимости от версии psycopg2
         if hasattr(notice, "message"):
             print(f"DB NOTICE: {notice.message.strip()}")
         else:
@@ -188,8 +185,6 @@ Base.metadata.create_all(engine)
 
 
 # ===================== TRIGGERS (3 DML & 1 DDL) =====================
-
-# В PostgreSQL триггеры обычно состоят из функции и самого триггера.
 
 # 1. DML Trigger: Обновление общей суммы заказа
 trigger_dml_1_func = """
@@ -311,9 +306,6 @@ END;
 $$ LANGUAGE plpgsql;
 """
 
-# Event trigger нельзя создать внутри транзакции в некоторых случаях,
-# и он требует прав суперпользователя.
-# Также он срабатывает на всю базу.
 trigger_ddl = """
 DROP EVENT TRIGGER IF EXISTS trg_prevent_drop_table;
 
@@ -324,7 +316,6 @@ EXECUTE FUNCTION prevent_drop_table();
 
 with engine.connect() as conn:
     print("Creating triggers...")
-    # Обычные DML/Table DDL можно в транзакции
     conn.execute(text(trigger_dml_1_func))
     conn.execute(text(trigger_dml_1))
     conn.execute(text(trigger_dml_2_func))
@@ -332,12 +323,9 @@ with engine.connect() as conn:
     conn.execute(text(trigger_dml_3_func))
     conn.execute(text(trigger_dml_3))
     conn.execute(text(trigger_ddl_func))
-    # Event triggers в PG не могут быть созданы в блоке с другими командами иногда,
-    # или требуют отдельного коммита.
     conn.commit()
     print("Triggers created.")
 
-# Event trigger часто требует отдельного выполнения, так как он глобальный.
 try:
     with engine.connect() as conn:
         conn.execute(text(trigger_ddl))
@@ -350,10 +338,6 @@ except Exception as e:
 
 
 def refresh_order_compositions():
-    """
-    Принудительно перечитывает OrderComposition из БД
-    (учитывает изменения после триггеров)
-    """
     s = Session()
     s.expire_all()  # сброс ORM-кэша
     items = s.query(OrderComposition).all()
@@ -371,28 +355,12 @@ def refresh_order_compositions():
     s.close()
     reload_tree(compositions_tree, rows)
 
-    # заодно обновим список заказов (total_amount меняется триггером)
     load_orders()
 
 
 def validate_russian_phone(phone: str) -> bool:
-    """
-    Валидация российского номера телефона.
-    Допустимые форматы:
-    +79991234567
-    89991234567
-    79991234567
-    9991234567
-    Также допускаются скобки, тире и пробелы, которые будут удалены перед проверкой.
-    """
-    # Удаляем все кроме цифр и начального плюса
     cleaned = re.sub(r"[^\d+]", "", phone)
 
-    # Регулярное выражение для российского мобильного/городского:
-    # Может начинаться с +7, 7, 8 или без префикса (тогда 10 цифр)
-    pattern = r"^(\+7|7|8)?[\s\-]?\(?[489][0-9]{2}\)?[\s\-]?[0-9]{3}[\s\-]?[0-9]{2}[\s\-]?[0-9]{2}$"
-
-    # Но проще проверить после очистки:
     digits = re.sub(r"\D", "", cleaned)
 
     if len(digits) == 10:
