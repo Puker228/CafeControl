@@ -87,14 +87,10 @@ class MenuItem(Base):
     volume_or_weight: Mapped[str]
 
     compositions: Mapped[list["OrderComposition"]] = relationship(
-        back_populates="menu_item",
-        cascade="all, delete",
-        passive_deletes=True
+        back_populates="menu_item", cascade="all, delete", passive_deletes=True
     )
     recipes: Mapped[list["Recipe"]] = relationship(
-        back_populates="menu_item",
-        cascade="all, delete",
-        passive_deletes=True
+        back_populates="menu_item", cascade="all, delete", passive_deletes=True
     )
 
 
@@ -129,9 +125,7 @@ class Order(Base):
     employee: Mapped["Employee"] = relationship(back_populates="orders")
 
     compositions: Mapped[list["OrderComposition"]] = relationship(
-        back_populates="order",
-        cascade="all, delete",
-        passive_deletes=True
+        back_populates="order", cascade="all, delete", passive_deletes=True
     )
 
     def total(self):
@@ -141,9 +135,7 @@ class Order(Base):
 class OrderComposition(Base):
     __tablename__ = "order_compositions"
 
-    order_id: Mapped[int] = mapped_column(
-        ForeignKey("orders.id", ondelete="CASCADE")
-    )
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
 
     order: Mapped["Order"] = relationship(back_populates="compositions")
 
@@ -307,10 +299,14 @@ FOR EACH ROW EXECUTE FUNCTION notify_menu_item_deletion();
 
 # 4. DDL Trigger: Простое уведомление о DDL
 trigger_ddl_func = """
-CREATE OR REPLACE FUNCTION notify_ddl_action()
+CREATE OR REPLACE FUNCTION prevent_drop_table()
 RETURNS event_trigger AS $$
 BEGIN
-    RAISE NOTICE 'Выполнена DDL операция: %', TG_TAG;
+    -- Проверяем, что выполняется DROP TABLE
+    IF TG_TAG = 'DROP TABLE' THEN
+        RAISE EXCEPTION
+            'Операция DROP TABLE запрещена в этой базе данных!';
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 """
@@ -319,9 +315,11 @@ $$ LANGUAGE plpgsql;
 # и он требует прав суперпользователя.
 # Также он срабатывает на всю базу.
 trigger_ddl = """
-DROP EVENT TRIGGER IF EXISTS trg_notify_ddl;
-CREATE EVENT TRIGGER trg_notify_ddl ON ddl_command_end
-EXECUTE FUNCTION notify_ddl_action();
+DROP EVENT TRIGGER IF EXISTS trg_prevent_drop_table;
+
+CREATE EVENT TRIGGER trg_prevent_drop_table
+ON ddl_command_start
+EXECUTE FUNCTION prevent_drop_table();
 """
 
 with engine.connect() as conn:
