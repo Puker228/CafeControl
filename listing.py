@@ -27,6 +27,7 @@ class Employee(Base):
 
     orders: Mapped[list["Order"]] = relationship(back_populates="employee")
 
+
 #########################
 
 # описание триггеров
@@ -80,6 +81,7 @@ with engine.connect() as conn:
 
 #########################
 
+
 # "помощники" в интерфейсе
 def reload_tree(tree, rows):
     tree.delete(*tree.get_children())
@@ -111,6 +113,7 @@ def delete_selected(tree, model, reload_func):
 
 #########################
 
+
 # загрузчики данных для таблиц в интерфейсе
 def load_customers():
     s = Session()
@@ -137,6 +140,7 @@ def load_suppliers():
 
 #########################
 
+
 # формы для добавления/редактирования данных
 def report_all_orders():
     s = Session()
@@ -159,7 +163,9 @@ def report_all_orders():
     s.close()
     return rows
 
+
 #########################
+
 
 # формирование отчета
 def export_report():

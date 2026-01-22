@@ -315,6 +315,7 @@ def refresh_order_compositions():
     # заодно обновим список заказов (total_amount меняется триггером)
     load_orders()
 
+
 def validate_russian_phone(phone: str) -> bool:
     """
     Валидация российского номера телефона.
@@ -417,14 +418,18 @@ def load_suppliers():
 
 def load_ingredients():
     s = Session()
-    rows = s.query(
-        Ingredient.id,
-        Ingredient.name,
-        Ingredient.unit,
-        Ingredient.stock_quantity,
-        Ingredient.purchase_price,
-        Supplier.name
-    ).join(Supplier).all()
+    rows = (
+        s.query(
+            Ingredient.id,
+            Ingredient.name,
+            Ingredient.unit,
+            Ingredient.stock_quantity,
+            Ingredient.purchase_price,
+            Supplier.name,
+        )
+        .join(Supplier)
+        .all()
+    )
 
     s.close()
     reload_tree(ingredients_tree, rows)
@@ -528,6 +533,8 @@ def report_all_orders():
 
     s.close()
     return rows
+
+
 def create_order_composition():
     win = tk.Toplevel(root)
     win.title("Добавить позицию в заказ")
@@ -579,6 +586,8 @@ def create_order_composition():
         win.destroy()
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+
+
 def edit_order_composition(tree):
     record_id = get_selected_id(tree)
     if record_id is None:
@@ -1261,6 +1270,8 @@ def edit_menu_item(tree):
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
+
+
 def edit_recipe(tree):
     record_id = get_selected_id(tree)
     if record_id is None:
@@ -1297,6 +1308,7 @@ def edit_recipe(tree):
         win.destroy()
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+
 
 def create_recipe():
     win = tk.Toplevel(root)
@@ -1838,9 +1850,7 @@ orders_tree = create_table(
     ("id", "customer", "employee", "date", "items", "total", "payment", "status"),
     ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Оплата", "Статус"),
 )
-tk.Button(fo, text="Добавить", command=create_order).pack(
-    side="left"
-)
+tk.Button(fo, text="Добавить", command=create_order).pack(side="left")
 tk.Button(fo, text="Редактировать", command=lambda: edit_order(orders_tree)).pack(
     side="left"
 )
@@ -1860,7 +1870,9 @@ recipes_tree = create_table(
     ("ID", "Блюдо", "Ингредиент", "Кол-во", "Ед. изм."),
 )
 tk.Button(fr, text="Добавить", command=create_recipe).pack(side="left")
-tk.Button(fr, text="Редактировать", command=lambda: edit_recipe(recipes_tree)).pack(side="left")
+tk.Button(fr, text="Редактировать", command=lambda: edit_recipe(recipes_tree)).pack(
+    side="left"
+)
 tk.Button(
     fr,
     text="Удалить",
