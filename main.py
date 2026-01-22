@@ -503,6 +503,89 @@ def report_all_orders():
 
     s.close()
     return rows
+def create_order_composition():
+    win = tk.Toplevel(root)
+    win.title("Добавить позицию в заказ")
+
+    tk.Label(win, text="Заказ ID").grid(row=0, column=0)
+    tk.Label(win, text="Позиция").grid(row=1, column=0)
+    tk.Label(win, text="Количество").grid(row=2, column=0)
+    tk.Label(win, text="Цена").grid(row=3, column=0)
+
+    order_var = tk.StringVar()
+    item_var = tk.StringVar()
+
+    order_box = ttk.Combobox(win, textvariable=order_var, state="readonly")
+    item_box = ttk.Combobox(win, textvariable=item_var, state="readonly")
+
+    e_qty = tk.Entry(win)
+    e_price = tk.Entry(win)
+
+    order_box.grid(row=0, column=1)
+    item_box.grid(row=1, column=1)
+    e_qty.grid(row=2, column=1)
+    e_price.grid(row=3, column=1)
+
+    s = Session()
+    orders = s.query(Order).all()
+    items = s.query(MenuItem).all()
+
+    order_map = {str(o.id): o.id for o in orders}
+    item_map = {m.name: m.id for m in items}
+
+    order_box["values"] = list(order_map.keys())
+    item_box["values"] = list(item_map.keys())
+    s.close()
+
+    def save():
+        s = Session()
+        s.add(
+            OrderComposition(
+                order_id=order_map[order_var.get()],
+                menu_item_id=item_map[item_var.get()],
+                quantity=int(e_qty.get()),
+                price_at_sale=float(e_price.get()),
+            )
+        )
+        s.commit()
+        s.close()
+        load_order_compositions()
+        load_orders()
+        win.destroy()
+
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+def edit_order_composition(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+
+    s = Session()
+    c = s.get(OrderComposition, record_id)
+
+    win = tk.Toplevel(root)
+    win.title("Редактировать позицию")
+
+    tk.Label(win, text="Количество").grid(row=0, column=0)
+    tk.Label(win, text="Цена").grid(row=1, column=0)
+
+    e_qty = tk.Entry(win)
+    e_qty.insert(0, c.quantity)
+    e_qty.grid(row=0, column=1)
+
+    e_price = tk.Entry(win)
+    e_price.insert(0, c.price_at_sale)
+    e_price.grid(row=1, column=1)
+
+    def save():
+        c.quantity = int(e_qty.get())
+        c.price_at_sale = float(e_price.get())
+        s.commit()
+        s.close()
+        load_order_compositions()
+        load_orders()
+        win.destroy()
+
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
 def create_order():
@@ -1153,6 +1236,99 @@ def edit_menu_item(tree):
 
     tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
     s.close()
+def edit_recipe(tree):
+    record_id = get_selected_id(tree)
+    if record_id is None:
+        return
+
+    s = Session()
+    r = s.get(Recipe, record_id)
+
+    win = tk.Toplevel(root)
+    win.title("Редактировать рецепт")
+
+    tk.Label(win, text="Количество").grid(row=0, column=0)
+    tk.Label(win, text="Ед. изм.").grid(row=1, column=0)
+
+    e_qty = tk.Entry(win)
+    e_qty.insert(0, r.quantity_required)
+    e_qty.grid(row=0, column=1)
+
+    e_unit = tk.Entry(win)
+    e_unit.insert(0, r.unit)
+    e_unit.grid(row=1, column=1)
+
+    def save():
+        try:
+            r.quantity_required = float(e_qty.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Количество должно быть числом")
+            return
+
+        r.unit = e_unit.get()
+        s.commit()
+        s.close()
+        load_recipes()
+        win.destroy()
+
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
+
+def create_recipe():
+    win = tk.Toplevel(root)
+    win.title("Новый рецепт")
+
+    tk.Label(win, text="Блюдо").grid(row=0, column=0)
+    tk.Label(win, text="Ингредиент").grid(row=1, column=0)
+    tk.Label(win, text="Количество").grid(row=2, column=0)
+    tk.Label(win, text="Ед. изм.").grid(row=3, column=0)
+
+    menu_var = tk.StringVar()
+    ing_var = tk.StringVar()
+
+    menu_box = ttk.Combobox(win, textvariable=menu_var, state="readonly")
+    ing_box = ttk.Combobox(win, textvariable=ing_var, state="readonly")
+
+    e_qty = tk.Entry(win)
+    e_unit = tk.Entry(win)
+
+    menu_box.grid(row=0, column=1)
+    ing_box.grid(row=1, column=1)
+    e_qty.grid(row=2, column=1)
+    e_unit.grid(row=3, column=1)
+
+    s = Session()
+    menu = s.query(MenuItem).all()
+    ingredients = s.query(Ingredient).all()
+
+    menu_map = {m.name: m.id for m in menu}
+    ing_map = {i.name: i.id for i in ingredients}
+
+    menu_box["values"] = list(menu_map.keys())
+    ing_box["values"] = list(ing_map.keys())
+    s.close()
+
+    def save():
+        try:
+            qty = float(e_qty.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Количество должно быть числом")
+            return
+
+        s = Session()
+        s.add(
+            Recipe(
+                menu_item_id=menu_map[menu_var.get()],
+                ingredient_id=ing_map[ing_var.get()],
+                quantity_required=qty,
+                unit=e_unit.get(),
+            )
+        )
+        s.commit()
+        s.close()
+        load_recipes()
+        win.destroy()
+
+    tk.Button(win, text="Сохранить", command=save).grid(columnspan=2)
 
 
 def edit_order(tree):
@@ -1637,7 +1813,7 @@ orders_tree = create_table(
     ("id", "customer", "employee", "date", "items", "total", "payment", "status"),
     ("ID", "Клиент", "Сотрудник", "Дата", "Кол-во", "Сумма", "Оплата", "Статус"),
 )
-tk.Button(fo, text="Добавить", command=create_order, font=("Arial", 10, "bold")).pack(
+tk.Button(fo, text="Добавить", command=create_order).pack(
     side="left"
 )
 tk.Button(fo, text="Редактировать", command=lambda: edit_order(orders_tree)).pack(
@@ -1658,6 +1834,8 @@ recipes_tree = create_table(
     ("id", "menu_item", "ingredient", "qty", "unit"),
     ("ID", "Блюдо", "Ингредиент", "Кол-во", "Ед. изм."),
 )
+tk.Button(fr, text="Добавить", command=create_recipe).pack(side="left")
+tk.Button(fr, text="Редактировать", command=lambda: edit_recipe(recipes_tree)).pack(side="left")
 tk.Button(
     fr,
     text="Удалить",
@@ -1673,6 +1851,12 @@ compositions_tree = create_table(
     ("id", "order_id", "menu_item", "qty", "price", "total"),
     ("ID", "ID Заказа", "Позиция", "Кол-во", "Цена", "Итого"),
 )
+tk.Button(foc, text="Добавить", command=create_order_composition).pack(side="left")
+tk.Button(
+    foc,
+    text="Редактировать",
+    command=lambda: edit_order_composition(compositions_tree),
+).pack(side="left")
 tk.Button(
     foc,
     text="Удалить",
