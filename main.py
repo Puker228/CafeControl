@@ -87,14 +87,22 @@ class MenuItem(Base):
     volume_or_weight: Mapped[str]
 
     compositions: Mapped[list["OrderComposition"]] = relationship(
-        back_populates="menu_item"
+        back_populates="menu_item",
+        cascade="all, delete",
+        passive_deletes=True
     )
-    recipes: Mapped[list["Recipe"]] = relationship(back_populates="menu_item")
+    recipes: Mapped[list["Recipe"]] = relationship(
+        back_populates="menu_item",
+        cascade="all, delete",
+        passive_deletes=True
+    )
 
 
 class Recipe(Base):
     __tablename__ = "recipes"
-    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"))
+    menu_item_id: Mapped[int] = mapped_column(
+        ForeignKey("menu_items.id", ondelete="CASCADE")
+    )
     ingredient_id: Mapped[int] = mapped_column(ForeignKey("ingredients.id"))
     quantity_required: Mapped[float]
     unit: Mapped[str]
@@ -121,7 +129,9 @@ class Order(Base):
     employee: Mapped["Employee"] = relationship(back_populates="orders")
 
     compositions: Mapped[list["OrderComposition"]] = relationship(
-        back_populates="order", cascade="all, delete"
+        back_populates="order",
+        cascade="all, delete",
+        passive_deletes=True
     )
 
     def total(self):
@@ -131,10 +141,16 @@ class Order(Base):
 class OrderComposition(Base):
     __tablename__ = "order_compositions"
 
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"))
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE")
+    )
+
     order: Mapped["Order"] = relationship(back_populates="compositions")
 
-    menu_item_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"))
+    menu_item_id: Mapped[int] = mapped_column(
+        ForeignKey("menu_items.id", ondelete="CASCADE")
+    )
+
     menu_item: Mapped["MenuItem"] = relationship(back_populates="compositions")
 
     quantity: Mapped[int] = mapped_column(default=1)
