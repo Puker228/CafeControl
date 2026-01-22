@@ -144,6 +144,17 @@ class OrderComposition(Base):
         return round(float(self.price_at_sale) * self.quantity, 2)
 
 
+class TriggerLog(Base):
+    __tablename__ = "trigger_logs"
+
+    trigger_name: Mapped[str]
+    action: Mapped[str]
+    entity: Mapped[str]
+    entity_id: Mapped[int]
+    message: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(default=datetime.now)
+
+
 engine = create_engine(
     "postgresql+psycopg2://postgres:postgres@localhost:5434/postgres", echo=False
 )
@@ -213,10 +224,27 @@ trigger_dml_2_func = """
 CREATE OR REPLACE FUNCTION notify_customer_update()
 RETURNS TRIGGER AS $$
 BEGIN
-    RAISE NOTICE 'Данные клиента обновлены: ID %', NEW.name;
+    INSERT INTO trigger_logs (
+        trigger_name,
+        action,
+        entity,
+        entity_id,
+        message,
+        created_at
+    )
+    VALUES (
+        'trg_notify_customer_update',
+        'UPDATE',
+        'customers',
+        NEW.id,
+        'Обновлены данные клиента: ' || NEW.name,
+        NOW()
+    );
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
 """
 
 trigger_dml_2 = """
@@ -231,10 +259,27 @@ trigger_dml_3_func = """
 CREATE OR REPLACE FUNCTION notify_menu_item_deletion()
 RETURNS TRIGGER AS $$
 BEGIN
-    RAISE NOTICE 'Блюдо удалено из меню: ID %, Название: %', OLD.id, OLD.name;
+    INSERT INTO trigger_logs (
+        trigger_name,
+        action,
+        entity,
+        entity_id,
+        message,
+        created_at
+    )
+    VALUES (
+        'trg_notify_menu_item_deletion',
+        'DELETE',
+        'menu_items',
+        OLD.id,
+        'Удалено блюдо из меню: ' || OLD.name,
+        NOW()
+    );
+
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
+
 """
 
 trigger_dml_3 = """
@@ -405,6 +450,25 @@ def load_customers():
     ).all()
     s.close()
     reload_tree(customers_tree, rows)
+
+
+def load_logs():
+    s = Session()
+    rows = (
+        s.query(
+            TriggerLog.id,
+            TriggerLog.created_at,
+            TriggerLog.trigger_name,
+            TriggerLog.action,
+            TriggerLog.entity,
+            TriggerLog.entity_id,
+            TriggerLog.message,
+        )
+        .order_by(TriggerLog.created_at.desc())
+        .all()
+    )
+    s.close()
+    reload_tree(logs_tree, rows)
 
 
 def load_suppliers():
@@ -1906,6 +1970,29 @@ tk.Button(
     text="Обновить",
     command=refresh_order_compositions,
 ).pack(side="left")
+
+# Logs
+fl = ttk.Frame(nb)
+nb.add(fl, text="Logs")
+
+logs_tree = create_table(
+    fl,
+    ("id", "time", "trigger", "action", "entity", "entity_id", "message"),
+    (
+        "ID",
+        "Дата",
+        "Триггер",
+        "Действие",
+        "Таблица",
+        "ID записи",
+        "Сообщение",
+    ),
+)
+
+tk.Button(fl, text="🔄 Обновить", command=load_logs).pack(side="left")
+
+load_logs()
+
 
 load_order_compositions()
 
