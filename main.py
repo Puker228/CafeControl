@@ -290,6 +290,31 @@ except Exception as e:
 # ===================== HELPERS =====================
 
 
+def refresh_order_compositions():
+    """
+    Принудительно перечитывает OrderComposition из БД
+    (учитывает изменения после триггеров)
+    """
+    s = Session()
+    s.expire_all()  # сброс ORM-кэша
+    items = s.query(OrderComposition).all()
+    rows = [
+        (
+            c.id,
+            c.order_id,
+            c.menu_item.name,
+            c.quantity,
+            c.price_at_sale,
+            c.total_price(),
+        )
+        for c in items
+    ]
+    s.close()
+    reload_tree(compositions_tree, rows)
+
+    # заодно обновим список заказов (total_amount меняется триггером)
+    load_orders()
+
 def validate_russian_phone(phone: str) -> bool:
     """
     Валидация российского номера телефона.
@@ -419,7 +444,7 @@ def load_orders():
                 o.employee.fio,
                 o.order_date.strftime("%Y-%m-%d %H:%M"),
                 len(o.compositions),
-                o.total(),
+                float(o.total_amount),
                 o.payment_method,
                 o.status,
             )
@@ -1864,6 +1889,12 @@ tk.Button(
         compositions_tree, OrderComposition, load_order_compositions
     ),
 ).pack(side="left")
+tk.Button(
+    foc,
+    text="Обновить",
+    command=refresh_order_compositions,
+).pack(side="left")
+
 load_order_compositions()
 
 root.mainloop()
